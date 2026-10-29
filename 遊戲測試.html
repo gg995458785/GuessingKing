@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成語瞎掰王——成語推理互動遊戲</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        },
+                        amberCustom: {
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Microsoft JhengHei', 'PingFang TC', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Keyframes & Utility styles */
+        @keyframes crowFly {
+            0% { transform: translateX(-120%) translateY(0px) rotate(5deg); }
+            50% { transform: translateX(50vw) translateY(-20px) rotate(-5deg); }
+            100% { transform: translateX(120vw) translateY(0px) rotate(5deg); }
+        }
+        .animate-crow {
+            animation: crowFly 3.5s linear forwards;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        /* Pulse ring for speaker timer */
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(14, 165, 233, 0.4); }
+            50% { box-shadow: 0 0 30px rgba(14, 165, 233, 0.8); }
+        }
+        .timer-glow {
+            animation: pulseGlow 2s infinite;
+        }
+
+        /* Prevent text selection during gameplay interactions */
+        .no-select {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800 min-h-screen font-sans flex flex-col justify-between relative overflow-x-hidden no-select">
+
+    <!-- Background Decorative Gradient -->
+    <div class="fixed inset-0 bg-gradient-to-br from-indigo-950 via-slate-900 to-sky-950 -z-20"></div>
+    <div class="fixed inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.15),transparent_50%)] -z-10"></div>
+
+    <!-- Crow SVG Animation Overlay (for wrong guesses) -->
+    <div id="crowContainer" class="fixed inset-0 pointer-events-none z-50 hidden overflow-hidden">
+        <div id="crowElement" class="absolute top-1/4 left-0 flex items-center space-x-2">
+            <svg class="w-20 h-20 text-slate-800 drop-shadow-lg filter" viewBox="0 0 64 64" fill="currentColor">
+                <path d="M58,24 C52,22 44,26 38,22 C34,18 30,10 22,8 C14,6 8,12 6,18 C4,24 8,30 14,32 C10,36 6,42 8,48 C10,54 18,56 24,52 C28,58 36,58 42,54 C48,50 54,40 58,24 Z" fill="#1e293b"/>
+                <circle cx="16" cy="16" r="3" fill="#ffffff"/>
+                <circle cx="15" cy="16" r="1.5" fill="#000000"/>
+                <path d="M6,18 L0,20 L6,24 Z" fill="#f59e0b"/>
+                <path d="M22,32 Q10,24 2,36 Q18,36 28,34 Z" fill="#0f172a"/>
+            </svg>
+            <span class="bg-slate-800 text-amber-400 font-bold px-3 py-1 rounded-full text-sm shadow-md border border-slate-700">嘎～嘎～嘎～ 傻眼！</span>
+        </div>
+    </div>
+
+    <!-- Confetti Canvas -->
+    <canvas id="confettiCanvas" class="fixed inset-0 pointer-events-none z-40 hidden"></canvas>
+
+    <!-- Top Header -->
+    <header class="w-full py-4 px-6 max-w-4xl mx-auto flex items-center justify-between border-b border-slate-800/80">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-sky-500/30">
+                瞎
+            </div>
+            <div>
+                <h1 class="text-xl font-black tracking-wide text-white">成語瞎掰王</h1>
+                <p class="text-xs text-sky-400">成語推理互動遊戲</p>
+            </div>
+        </div>
+        <div id="gameBadge" class="hidden text-xs bg-slate-800/80 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full">
+            第 <span id="currentRoundText" class="text-sky-400 font-bold">1</span> / <span id="totalRoundsText">5</span> 回合
+        </div>
+    </header>
+
+    <!-- Main Dynamic Content Area -->
+    <main class="flex-grow flex items-center justify-center p-4 w-full max-w-4xl mx-auto my-2">
+
+        <!-- STAGE 0: SETUP SCREEN -->
+        <section id="stage-setup" class="w-full glass-card rounded-2xl p-6 md:p-8 text-slate-800 shadow-2xl space-y-6 transition-all duration-300">
+            <div class="text-center space-y-2">
+                <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900">🎮 遊戲設定</h2>
+                <p class="text-sm text-slate-600">請設定參賽玩家暱稱與本局遊戲規則 (適用國、高中生，支援 3 - 10 人對戰)</p>
+            </div>
+
+            <!-- Player Input Section -->
+            <div class="space-y-3 bg-slate-50/80 p-4 md:p-5 rounded-xl border border-slate-200">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-bold text-slate-700 flex items-center">
+                        <span class="mr-1.5">👥</span> 玩家列表 (<span id="playerCount">4</span> 人)
+                    </label>
+                    <button type="button" id="addPlayerBtn" onclick="addPlayerField()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-3 py-1.5 rounded-lg shadow transition">
+                        + 新增玩家
+                    </button>
+                </div>
+                <div id="playerInputs" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-56 overflow-y-auto pr-1">
+                    <!-- Dynamic Player Inputs inserted by JS -->
+                </div>
+                <p id="playerError" class="text-xs text-rose-500 hidden font-semibold">⚠️ 請確保至少有 3 位玩家，且名字不能重複或空白！</p>
+            </div>
+
+            <!-- Game Settings Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Rounds Setting -->
+                <div class="bg-slate-50/80 p-4 rounded-xl border border-slate-200">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">🏆 總回合數</label>
+                    <select id="settingRounds" class="w-full bg-white border border-slate-300 text-slate-800 text-sm font-bold rounded-lg p-2.5 focus:ring-2 focus:ring-sky-500 outline-none">
+                        <option value="3">3 回合 (快速體驗)</option>
+                        <option value="5" selected>5 回合 (標準對戰)</option>
+                        <option value="8">8 回合 (精彩連發)</option>
+                        <option value="10">10 回合 (馬拉松競賽)</option>
+                    </select>
+                </div>
+
+                <!-- Timer Setting -->
+                <div class="bg-slate-50/80 p-4 rounded-xl border border-slate-200">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">⏱️ 發言限時 (秒/人)</label>
+                    <select id="settingTimer" class="w-full bg-white border border-slate-300 text-slate-800 text-sm font-bold rounded-lg p-2.5 focus:ring-2 focus:ring-sky-500 outline-none">
+                        <option value="15">15 秒 (緊張刺激)</option>
+                        <option value="20" selected>20 秒 (標準時間)</option>
+                        <option value="30">30 秒 (充分發揮)</option>
+                    </select>
+                </div>
+
+                <!-- Difficulty Setting -->
+                <div class="bg-slate-50/80 p-4 rounded-xl border border-slate-200">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">📚 題目難易度</label>
+                    <select id="settingDifficulty" class="w-full bg-white border border-slate-300 text-slate-800 text-sm font-bold rounded-lg p-2.5 focus:ring-2 focus:ring-sky-500 outline-none">
+                        <option value="easy">簡單 (日常生活)</option>
+                        <option value="medium" selected>中等 (考試常見)</option>
+                        <option value="hard">困難 (自我挑戰)</option>
+                        <option value="chaos">混亂 (全題目隨機)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Scoring Rules Tip Card -->
+            <div class="bg-indigo-50/90 p-4 rounded-xl border border-indigo-100 text-xs text-indigo-950 space-y-1.5">
+                <span class="font-black block text-indigo-900 text-sm">💡 計分規則說明：</span>
+                <p>• 🤝 <b>老實人是想想的朋友</b>：若「想想」指認出真正的「老實人」，<b>想想與老實人各獲 +2 分</b>。</p>
+                <p>• 😈 <b>瞎掰人喜歡製造混亂</b>：若「想想」誤指認「瞎掰人」為老實人，<b>被指認的瞎掰人獨得 +3 分</b>。</p>
+            </div>
+
+            <!-- Start Game Button -->
+            <button onclick="startGame()" class="w-full py-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-extrabold text-lg rounded-xl shadow-lg shadow-sky-500/25 transition transform active:scale-95">
+                🚀 開始遊戲
+            </button>
+        </section>
+
+        <!-- STAGE 1: ROLE PASS SCREEN (傳遞裝置) -->
+        <section id="stage-role-pass" class="w-full glass-card rounded-2xl p-8 text-center space-y-6 hidden">
+            <div class="w-20 h-20 mx-auto bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-4xl shadow-inner">
+                📱
+            </div>
+            <div class="space-y-2">
+                <span class="text-xs uppercase font-bold tracking-widest text-slate-400">請保持保密，勿讓他人看見螢幕</span>
+                <h2 class="text-3xl font-black text-slate-900">請將裝置交給</h2>
+                <div id="targetPlayerName" class="text-4xl font-extrabold text-sky-600 py-2">
+                    [ 玩家姓名 ]
+                </div>
+            </div>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">
+                拿好裝置後，點擊下方按鈕查看你的私密身分卡片！
+            </p>
+            <button onclick="revealRoleCard()" class="w-full py-4 bg-sky-600 hover:bg-sky-700 text-white font-bold text-lg rounded-xl shadow-lg transition transform active:scale-95">
+                👀 我準備好了，查看身分
+            </button>
+        </section>
+
+
+        <!-- STAGE 2: SECRET IDENTITY REVEAL SCREEN (查看身分 + 10秒自動倒數) -->
+        <section id="stage-role-reveal" class="w-full glass-card rounded-2xl p-6 md:p-8 space-y-6 hidden">
+            <!-- Header Banner -->
+            <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🕵️</span>
+                    <span class="font-bold text-slate-700">身分確認頁面</span>
+                </div>
+                <!-- 10-second Countdown Indicator -->
+                <div class="bg-amber-100 border border-amber-300 text-amber-800 px-3 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
+                    <span>⏱️</span>
+                    <span id="roleRevealCountdownText">10 秒後自動切換</span>
+                </div>
+            </div>
+
+            <!-- Role Detail Card -->
+            <div id="roleDetailBox" class="p-6 rounded-2xl border-2 transition-all space-y-4">
+                <div class="flex items-center justify-between">
+                    <span id="roleBadge" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                        [ 角色名稱 ]
+                    </span>
+                    <span class="text-xs text-slate-400">專屬秘密提示</span>
+                </div>
+
+                <div id="roleTitle" class="text-2xl md:text-3xl font-black text-slate-900">
+                    --
+                </div>
+
+                <!-- Idiom & Meaning Displayed based on Role -->
+                <div id="roleContent" class="space-y-3 bg-white/80 p-4 rounded-xl border border-slate-200 text-slate-800">
+                    <!-- Dynamic Role Information -->
+                </div>
+
+                <!-- Role Mission Instruction -->
+                <div id="roleMission" class="text-xs md:text-sm font-bold p-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700">
+                    --
+                </div>
+            </div>
+
+            <!-- Progress bar for 10s auto timer -->
+            <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div id="roleTimerBar" class="bg-amber-500 h-full w-full transition-all duration-1000 ease-linear"></div>
+            </div>
+
+            <button id="nextRoleBtn" onclick="finishRoleReveal()" class="w-full py-3.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow transition">
+                下一步 (立即交給下一位)
+            </button>
+        </section>
+
+
+        <!-- STAGE 3: PUBLIC SPEAKING PHASE (公開發言階段 - 已移除字面提示) -->
+        <section id="stage-speaking" class="w-full glass-card rounded-2xl p-6 md:p-8 space-y-6 hidden">
+            <!-- Header Info -->
+            <div class="text-center space-y-1">
+                <span class="text-xs font-bold text-sky-600 bg-sky-100 px-3 py-1 rounded-full uppercase tracking-wider">🗣️ 發言階段</span>
+                <h2 class="text-3xl font-black text-slate-900">【 <span id="speakingIdiomTitle" class="text-sky-600">--</span> 】</h2>
+                <p class="text-xs text-slate-500">大家輪流發表成語解釋，老實人請說真話，瞎掰人請發揮創意！</p>
+            </div>
+
+            <!-- Current Speaker Spotlight Card -->
+            <div class="bg-gradient-to-b from-sky-50 to-white border-2 border-sky-200 p-6 rounded-2xl text-center space-y-4 timer-glow">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    目前發言者 (<span id="speakerIndexText">1</span> / <span id="speakerTotalText">3</span>)
+                </div>
+
+                <div id="currentSpeakerName" class="text-4xl font-black text-slate-900 tracking-wide">
+                    [ 玩家姓名 ]
+                </div>
+
+                <!-- Big Countdown Circle Timer -->
+                <div class="relative w-36 h-36 mx-auto flex items-center justify-center my-2">
+                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                        <path class="text-slate-200" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path id="speakerTimerRing" class="text-sky-500 transition-all duration-1000 ease-linear" stroke-dasharray="100, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="absolute flex flex-col items-center justify-center">
+                        <span id="speakerTimerText" class="text-4xl font-extrabold text-slate-800">20</span>
+                        <span class="text-[10px] text-slate-400 font-bold uppercase">秒</span>
+                    </div>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="flex items-center justify-center space-x-3 pt-2">
+                    <button id="pauseSpeakerBtn" onclick="toggleSpeakerPause()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-sm transition">
+                        ⏸️ 暫停
+                    </button>
+                    <button onclick="nextSpeaker()" class="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-sm shadow-md transition">
+                        ⏭️ 下一位發言
+                    </button>
+                </div>
+            </div>
+
+            <!-- Speaker Queue Status -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <span class="text-xs font-bold text-slate-500 block">發言順序與進度</span>
+                <div id="speakerQueueList" class="flex flex-wrap gap-2">
+                    <!-- Queue badges inserted by JS -->
+                </div>
+            </div>
+        </section>
+
+
+        <!-- STAGE 4: REASONING PHASE (想想推理階段) -->
+        <section id="stage-reasoning" class="w-full glass-card rounded-2xl p-6 md:p-8 space-y-6 hidden">
+            <div class="text-center space-y-2">
+                <span class="text-xs font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded-full uppercase tracking-wider">🧠 推理時刻</span>
+                <h2 class="text-2xl md:text-3xl font-black text-slate-900">請【<span id="thinkerPlayerName" class="text-purple-600">--</span>】進行推理</h2>
+                <p class="text-sm text-slate-600">仔細回想剛才大家的發言，找出誰是說真話的老實人！</p>
+            </div>
+
+            <form id="reasoningForm" onsubmit="submitReasoning(event)" class="space-y-6">
+                <!-- Question: Pick Honest Person -->
+                <div class="bg-slate-50/90 p-5 rounded-xl border border-slate-200 space-y-3">
+                    <label class="block text-sm font-bold text-slate-800">
+                        誰是說真話的「老實人」？
+                        <span class="block text-xs text-sky-600 font-normal mt-0.5">
+                            (指認成功：想想與老實人各 +2 分；指認失敗：被誤認的瞎掰人獨得 +3 分)
+                        </span>
+                    </label>
+                    <div id="honestOptions" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <!-- Dynamic Honest Options -->
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-lg rounded-xl shadow-lg transition transform active:scale-95">
+                    🎯 提交推理結果
+                </button>
+            </form>
+        </section>
+
+
+        <!-- STAGE 5A: SCORE & IDENTITY REVEAL SCREEN (身分揭曉與得分統計) -->
+        <section id="stage-score-reveal" class="w-full glass-card rounded-2xl p-6 md:p-8 space-y-6 hidden">
+            <!-- Header Result Status -->
+            <div class="text-center space-y-2">
+                <div id="revealResultBadge" class="inline-block px-4 py-1.5 rounded-full text-sm font-extrabold shadow-sm">
+                    --
+                </div>
+                <h2 class="text-3xl font-black text-slate-900">本回合身分揭曉與得分</h2>
+            </div>
+
+            <!-- Identity Truth Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div class="bg-purple-50 border border-purple-200 p-3.5 rounded-xl">
+                    <span class="text-xs font-bold text-purple-600 uppercase block">🎭 想想</span>
+                    <span id="revealThinkerName" class="font-extrabold text-slate-800 text-base">--</span>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl">
+                    <span class="text-xs font-bold text-emerald-600 uppercase block">😇 老實人</span>
+                    <span id="revealHonestName" class="font-extrabold text-slate-800 text-base">--</span>
+                </div>
+                <div class="bg-rose-50 border border-rose-200 p-3.5 rounded-xl">
+                    <span class="text-xs font-bold text-rose-600 uppercase block">😈 瞎掰人</span>
+                    <span id="revealBlufferNames" class="font-extrabold text-slate-800 text-base">--</span>
+                </div>
+            </div>
+
+            <!-- Score Allocation Summary -->
+            <div id="scoreChangeSummary" class="bg-amber-50/80 border border-amber-200 p-4 rounded-xl text-xs space-y-2 text-amber-900">
+                <!-- Dynamic Points Log -->
+            </div>
+
+            <!-- Manual Proceed Button to Stage 5B -->
+            <button onclick="goToStageLearn()" class="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-lg rounded-xl shadow-lg transition transform active:scale-95">
+                📖 查看成語教學解析
+            </button>
+        </section>
+
+
+        <!-- STAGE 5B: IDIOM TEACHING & EXPLANATION SCREEN (成語學習與教學解析) -->
+        <section id="stage-learn-reveal" class="w-full glass-card rounded-2xl p-6 md:p-8 space-y-6 hidden">
+            <div class="text-center space-y-1">
+                <span class="text-xs font-bold text-sky-600 bg-sky-100 px-3 py-1 rounded-full uppercase tracking-wider">📚 成語學習小教室</span>
+                <h2 class="text-2xl md:text-3xl font-black text-slate-900">國高中語文典故與解析</h2>
+            </div>
+
+            <!-- Idiom Detailed Learning Card -->
+            <div class="bg-white p-6 rounded-2xl border-2 border-slate-200 space-y-4 shadow-sm">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-3xl font-black text-sky-600" id="learnIdiom">--</span>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded font-mono" id="learnZhuyin">--</span>
+                    </div>
+                    <span class="text-xs font-bold bg-sky-100 text-sky-700 px-3 py-1 rounded-full" id="learnDifficulty">--</span>
+                </div>
+
+                <div>
+                    <span class="text-xs font-bold text-slate-400 block uppercase mb-1">【正確釋義】</span>
+                    <p id="learnMeaning" class="text-base font-bold text-slate-800 leading-relaxed">--</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <span class="font-bold text-slate-600 block mb-1.5 text-sm">📜 典故 / 出處：</span>
+                        <p id="learnOrigin" class="text-slate-700 leading-relaxed">--</p>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <span class="font-bold text-slate-600 block mb-1.5 text-sm">✍️ 常用例句：</span>
+                        <p id="learnExample" class="text-slate-700 leading-relaxed italic">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Purely Manual Action Button -->
+            <button id="nextRoundBtn" onclick="advanceToNextRound()" class="w-full py-4 bg-slate-900 hover:bg-black text-white font-extrabold text-lg rounded-xl shadow-lg transition transform active:scale-95">
+                前往下一回合 ➡️
+            </button>
+        </section>
+
+
+        <!-- STAGE 6: FINAL LEADERBOARD SCREEN (最終排行榜) -->
+        <section id="stage-leaderboard" class="w-full glass-card rounded-2xl p-6 md:p-8 space-y-6 hidden">
+            <div class="text-center space-y-2">
+                <div class="text-5xl my-1">🏆</div>
+                <h2 class="text-3xl font-black text-slate-900">最終戰績排行榜</h2>
+                <p class="text-sm text-slate-600">恭喜本局的成語瞎掰王與推理大師！</p>
+            </div>
+
+            <!-- Podium Ranking List -->
+            <div id="finalRankList" class="space-y-3">
+                <!-- Dynamic Ranks inserted by JS -->
+            </div>
+
+            <button onclick="resetGameToSetup()" class="w-full py-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-extrabold text-lg rounded-xl shadow-lg transition transform active:scale-95">
+                🔄 再玩一局
+            </button>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full py-3 text-center text-xs text-slate-500 border-t border-slate-800/60">
+        成語瞎掰王 &copy; 國、高中成語推理互動遊戲 | 專為國高中語文學習設計
+    </footer>
+
+    <!-- GAME JS LOGIC -->
+    <script>
+        /* ----------------------------------------------------
+           1. COMPLETE 180-IDIOM DATABASE (國、高中成語資料庫)
+           60 Easy (簡單), 60 Medium (中等), 60 Hard (困難)
+           ---------------------------------------------------- */
+        const IDIOM_DATABASE = [
+            // --- 簡單 (60首：國中與基礎高中範疇) ---
+            { idiom: "一箭雙雕", zhuyin: "ㄧ ㄐㄧㄢˋ ㄕㄨㄤ ㄉㄧㄠ", diff: "easy", meaning: "比喻做一件事同時達到兩種目的或效果。", origin: "《北史·長孫晟傳》：「嘗有二雕飛而爭肉，因發一矢，貫雙雕焉。」", example: "他參加這次語文競賽不僅拿到獎狀，還順便儲備了學習歷程檔案，真是一箭雙雕。" },
+            { idiom: "畫蛇添足", zhuyin: "ㄏㄨㄚˋ ㄕㄜˊ ㄊㄧㄢ ㄗㄨˊ", diff: "easy", meaning: "比喻多此一舉，反而弄巧成拙，把事情辦壞。", origin: "《戰國策·齊策二》：「畫蛇足者，奴能成其蛇。」", example: "這篇作文結構已經很完整，結尾再加那句口頭禪簡直是畫蛇添足。" },
+            { idiom: "守株待兔", zhuyin: "ㄕㄡˇ ㄓㄨ ㄉㄞˋ ㄊㄨˋ", diff: "easy", meaning: "比喻拘泥守舊，不知變通，或指企圖不勞而獲。", origin: "《韓非子·五蠹》：「宋人有耕者。田中有株，兔走觸株，折頸而死。」", example: "準備會考應該主動安排複習計畫，若只是守株待兔，成績是不會進步的。" },
+            { idiom: "井底之蛙", zhuyin: "ㄐㄧㄥˇ ㄉㄧˇ ㄓ ㄨㄚ", diff: "easy", meaning: "比喻見識狹小、眼界短淺的人。", origin: "《莊子·秋水》：「井蛙不可以語於海者，拘於虛也。」", example: "我們應該多閱讀跨領域書籍開闊眼界，千萬不要做井底之蛙。" },
+            { idiom: "狐假虎威", zhuyin: "ㄏㄨˊ ㄐㄧㄚˇ ㄏㄨˇ ㄨㄟ", diff: "easy", meaning: "比喻憑藉有權勢者的威勢恐嚇或欺壓他人。", origin: "《戰國策·楚策一》：「虎不知獸畏己而走也，以為畏狐也。」", example: "他不過是仗著學長的身分狐假虎威，大家心裡都很不服氣。" },
+            { idiom: "掩耳盜鈴", zhuyin: "ㄧㄢˇ ㄦˇ ㄉㄠˋ ㄌㄧㄥˊ", diff: "easy", meaning: "比喻自己欺騙自己，以為別人不知道。", origin: "《呂氏春秋·自知》：「恐人聞之而奪己也，遽掩其耳。」", example: "考前不肯面對自己的弱點，只是掩耳盜鈴，對學習毫無幫助。" },
+            { idiom: "亡羊補牢", zhuyin: "ㄨㄤˊ ㄧㄤˊ ㄅㄨˇ ㄌㄠˊ", diff: "easy", meaning: "比喻犯錯或遭受損失後及時採取補救措施，尚未太遲。", origin: "《戰國策·楚策四》：「亡羊而補牢，未為遲也。」", example: "雖然模擬考失利，但只要現在開始訂正錯題，亡羊補牢還來得及。" },
+            { idiom: "盲人摸象", zhuyin: "ㄇㄤˊ ㄖㄣˊ ㄇㄛ ㄒㄧㄤˋ", diff: "easy", meaning: "比喻看待事物以偏概全，不能了解全局。", origin: "《大般涅槃經》卷三十：「有王告大臣，汝牽一象來示盲者……各各說象之形狀。」", example: "專題探討如果只看單一文獻，難免會犯盲人摸象的錯誤。" },
+            { idiom: "破釜沉舟", zhuyin: "ㄆㄛˋ ㄈㄨˇ ㄔㄣˊ ㄓㄡ", diff: "easy", meaning: "比喻切斷退路，下定決心奮戰到底。", origin: "《史記·項羽本紀》：「項羽乃悉引兵渡河，皆沉船，破釜椹，燒廬舍。」", example: "面對即將到來的學測衝刺期，大家都要有破釜沉舟的決心。" },
+            { idiom: "胸有成竹", zhuyin: "ㄒㄧㄨㄥ ㄧㄡˇ ㄔㄥˊ ㄓㄨˊ", diff: "easy", meaning: "比喻做事之前心中已有完整穩妥的謀劃。", origin: "宋·蘇軾《文與可畫筼筜谷偃竹記》：「畫竹必先得成竹於胸中。」", example: "對於這場分組簡報，他早已準備充分，胸有成竹。" },
+            { idiom: "對牛彈琴", zhuyin: "ㄉㄨㄟˋ ㄋㄧㄡˊ ㄊㄢˊ ㄑㄧㄣˊ", diff: "easy", meaning: "比喻對不懂道理的人講道理，白費口舌。", origin: "漢·牟融《理惑論》：「公明儀為牛彈清角之操，伏食如故。」", example: "跟一個沒有心想聽的人理性溝通，簡直是對牛彈琴。" },
+            { idiom: "濫竽充數", zhuyin: "ㄌㄢˋ ㄩˊ ㄔㄨㄥ ㄕㄨˋ", diff: "easy", meaning: "比喻沒有真才實學的人混在行家裡充數。", origin: "《韓非子·內儲說上》：「齊宣王使人吹竽，必三百人……南郭處士請為王吹竽。」", example: "專題報告分工時每個人都要有實質貢獻，絕不能濫竽充數。" },
+            { idiom: "塞翁失馬", zhuyin: "ㄙㄞˋ ㄨㄥ ㄕ ㄇㄚˇ", diff: "easy", meaning: "比喻禍福無常，壞事在一定條件下可能變成好事。", origin: "《淮南子·人間訓》：「近塞上之人，有善術者，馬無故亡而入胡。」", example: "這次比賽雖然落選，卻讓大家發現了團隊問題，真是塞翁失馬。" },
+            { idiom: "螳臂當車", zhuyin: "ㄊㄤˊ ㄅㄧˋ ㄉㄤ ㄔㄜ", diff: "easy", meaning: "比喻不自量力，企圖阻擋無法抗拒的強大力量。", origin: "《莊子·人間世》：「汝不知夫螳螂乎？怒其臂以當車轍，不知其不勝任也。」", example: "憑他單槍匹馬就想推翻整項決定，無異於螳臂當車。" },
+            { idiom: "唇亡齒寒", zhuyin: "ㄔㄨㄣˊ ㄨㄤˊ ㄔˇ ㄏㄢˊ", diff: "easy", meaning: "比喻雙方關係非常密切，互相依存，利害與共。", origin: "《左傳·僖公五年》：「諺所謂『輔車相依，唇亡齒寒』者，其虞虢之謂也。」", example: "這兩家社團在活動資源上唇亡齒寒，必須攜手合作。" },
+            { idiom: "打草驚蛇", zhuyin: "ㄉㄚˇ ㄘㄠˇ ㄐㄧㄥ ㄕㄜˊ", diff: "easy", meaning: "比喻行為不慎而使對方有了防備。", origin: "宋·鄭文寶《南唐近事》：「汝雖打草，吾已驚蛇。」", example: "我們決定先私下蒐集證據，以免打草驚蛇讓對方脫罪。" },
+            { idiom: "葉公好龍", zhuyin: "ㄧㄝˋ ㄍㄨㄥ ㄏㄠˋ ㄌㄨㄥˊ", diff: "easy", meaning: "比喻表面上愛好某事物，實際上並非真心喜愛。", origin: "漢·劉向《新序·雜事五》：「葉公子高好龍……天龍聞而下之……葉公見之，棄而還走。」", example: "他口口聲聲說喜歡自主學習，卻連一本書都沒讀過，根本是葉公好龍。" },
+            { idiom: "愚公移山", zhuyin: "ㄩˊ ㄍㄨㄥ ㄧˊ ㄕㄢ", diff: "easy", meaning: "比喻有堅定的意志與毅力，不畏艱難持續努力。", origin: "《列子·湯問》：「太行、王屋二山……愚公家聚室而謀曰：吾與汝畢力平險。」", example: "只要有愚公移山的精神，再複雜的程式碼都能除錯完成。" },
+            { idiom: "買櫞還珠", zhuyin: "ㄇㄞˇ ㄩㄢˊ ㄏㄨㄢˊ ㄓㄨ", diff: "easy", meaning: "比喻取捨不當，重視次要的裝飾而捨棄主要的本質。", origin: "《韓非子·外儲說左上》：「楚人有賣珠於鄭者……鄭人買其櫞而還其珠。」", example: "做簡報只顧著換酷炫特效卻忽視研究內容，豈不是買櫞還珠？" },
+            { idiom: "杞人憂天", zhuyin: "ㄑㄧˇ ㄖㄣˊ ㄧㄡ ㄊㄧㄢ", diff: "easy", meaning: "比喻缺乏事實根據而進行不必要的憂慮。", origin: "《列子·天瑞》：「杞國有人憂天地崩墜，身亡所寄，廢寢食者。」", example: "這座球場的設施非常安全，你擔心它會塌下來簡直是杞人憂天。" },
+            { idiom: "刻舟求劍", zhuyin: "ㄎㄜˋ ㄓㄡ ㄑㄧㄡˊ ㄐㄧㄢˋ", diff: "easy", meaning: "比喻拘泥刻板，不知適應客觀形勢的變化。", origin: "《呂氏春秋·察今》：「楚人有涉江者，其劍自舟中墜於水，遽刻其舟曰：『是吾劍之所從墜。』」", example: "時空背景已經不同，我們不能再用刻舟求劍的方式管理社團。" },
+            { idiom: "自相矛盾", zhuyin: "ㄗˋ ㄒㄧㄤ ㄇㄠˊ ㄉㄨㄣˇ", diff: "easy", meaning: "比喻言語或行為前後不一致，互相牴觸。", origin: "《韓非子·難一》：「楚人有鬻盾與矛者……以子之矛陷子之盾，何如？其人弗能應也。」", example: "他剛才說沒看見經過，現在又詳細描繪細節，真是自相矛盾。" },
+            { idiom: "臥薪嚐膽", zhuyin: "ㄨㄛˋ ㄒㄧㄣ ㄔㄤˊ ㄉㄢˇ", diff: "easy", meaning: "比喻刻苦自勵，發憤圖強，準備復仇或重新站起來。", origin: "《史記·越王勾踐世家》：「越王勾踐反國，乃苦身焦思，置膽於坐，坐臥即仰膽。」", example: "經過一年的臥薪嚐膽，校隊終於在今年高中聯賽贏得冠軍。" },
+            { idiom: "熟能生巧", zhuyin: "ㄕㄨˊ ㄋㄥˊ ㄕㄥ ㄑㄧㄠˇ", diff: "easy", meaning: "做事熟練了，自然能掌握竅門，做得又快又好。", origin: "宋·歐陽修《歸田錄》卷一：「無他，唯手熟爾。」", example: "英文聽力沒有捷徑，只要每天堅持練習，自然熟能生巧。" },
+            { idiom: "班門弄斧", zhuyin: "ㄅㄢ ㄇㄣˊ ㄋㄨㄥˋ ㄈㄨˇ", diff: "easy", meaning: "比喻在行家面前賣弄本領，不自量力。", origin: "宋·歐陽修《與梅聖俞書》：「魯班門前弄斧，豈不知愧！」", example: "在您這位國文國學大師面前分析詩詞，我真是班門弄斧。" },
+            { idiom: "水滴石穿", zhuyin: "ㄕㄨㄟˇ ㄉㄧ ㄕˊ ㄔㄨㄢ", diff: "easy", meaning: "比喻只要持之以恆，微小的力量也能完成艱巨任務。", origin: "《漢書·枚乘傳》：「泰山之霤穿石，單極之綆斷幹。」", example: "積累學識需要時間，只要有水滴石穿的毅力，終能考取理想志願。" },
+            { idiom: "朝三暮四", zhuyin: "ㄓㄠ ㄙㄢ ㄇㄨˋ ㄙˋ", diff: "easy", meaning: "比喻經常變卦，反覆無常，或用詐術欺騙人。", origin: "《莊子·齊物論》：「狙公賦芧，曰：『朝三而暮四。』眾狙皆怒。」", example: "規劃讀書計畫要有定性，切忌朝三暮四、頻繁更換目標。" },
+            { idiom: "拔苗助長", zhuyin: "ㄅㄚˊ ㄇㄧㄠˊ ㄓㄨˋ ㄓㄤˇ", diff: "easy", meaning: "比喻急於求成，反而損害了事物的發展。", origin: "《孟子·公孫丑上》：「宋人有閔其苗之不長而揠之者，芒芒然歸。」", example: "學習基礎科學要循序漸進，跳過原理直接背題只會拔苗助長。" },
+            { idiom: "胸無點墨", zhuyin: "ㄒㄧㄨㄥ ㄨˊ ㄉㄧㄢˇ ㄇㄛˋ", diff: "easy", meaning: "形容人沒有文化、缺乏學識。", origin: "宋·釋普濟《五燈會元》：「胸無點墨，口不擇言。」", example: "他平時不愛閱讀，一發表論文就暴露了胸無點墨的缺點。" },
+            { idiom: "雪中送炭", zhuyin: "ㄒㄩㄝˇ ㄓㄨㄥ ㄙㄨㄥˋ ㄊㄢˋ", diff: "easy", meaning: "比喻在他人急需或危難時給予及時的幫助。", origin: "宋·范成大《大雪送炭與乞米》詩：「雪中送炭君宜赫，臨渴掘井吾何及。」", example: "在我遇到解題瓶頸時他主動前來指導，真是雪中送炭。" },
+            { idiom: "勤能補拙", zhuyin: "ㄑㄧㄣˊ ㄋㄥˊ ㄅㄨˇ ㄓㄨㄛˊ", diff: "easy", meaning: "指勤奮努力可以彌補天資的不足。", origin: "宋·邵雍《弄筆吟》：「勤能補拙心常泰，儉可養廉氣自除。」", example: "雖然起步比別人慢，但他深信勤能補拙，每天都最早到課室複習。" },
+            { idiom: "走馬看花", zhuyin: "ㄗㄡˇ ㄇㄚˇ ㄎㄢˋ ㄏㄨㄚ", diff: "easy", meaning: "形容粗略地觀察事物，未能深入了解。", origin: "唐·孟郊《登科後》詩：「春風得意馬蹄疾，一日看盡長安花。」", example: "參訪美術館如果只是走馬看花，就很難體會作品背後的歷史意涵。" },
+            { idiom: "開門見山", zhuyin: "ㄎㄞ ㄇㄣˊ ㄐㄧㄢˋ ㄕㄢ", diff: "easy", meaning: "比喻說話或寫文章直截了當，不拐彎抹角。", origin: "唐·劉宗元《答韋中立論師道書》：「開門見山，揮毫作賦。」", example: "他在發表演講時開門見山指出問題核心，獲得台下熱烈掌聲。" },
+            { idiom: "錦上添花", zhuyin: "ㄐㄧㄣˇ ㄕㄤˋ ㄊㄧㄢ ㄏㄨㄚ", diff: "easy", meaning: "比喻美上加美，好上加好。", origin: "宋·黃庭堅《漸奎閣》詩：「錦上添花色愈翠。」", example: "這份研究報告本身就很優秀，加上這張統計圖表更是錦上添花。" },
+            { idiom: "入木三分", zhuyin: "ㄖㄨˋ ㄇㄨˋ ㄙㄢ ㄈㄣ", diff: "easy", meaning: "形容書法筆力雄厚，亦比喻見解極為深刻透徹。", origin: "唐·張懷瓘《書斷》：「王羲之書祝版，工人削之，筆入木三分。」", example: "社論對於社會現象的剖析入木三分，引發同學們廣泛討論。" },
+            { idiom: "先發制人", zhuyin: "ㄒㄧㄢ ㄈㄚ ㄓˋ ㄖㄣˊ", diff: "easy", meaning: "指先採取行動以取得主動優勢，控制對方。", origin: "《漢書·項籍傳》：「先發制人，後發制於人。」", example: "辯論比賽中我方決定先發制人，在第一質詢階段就提出關鍵論據。" },
+            { idiom: "迎刃而解", zhuyin: "ㄧㄥˊ ㄖㄣˋ ㄦˊ ㄐㄧㄝˇ", diff: "easy", meaning: "比喻主要問題解決了，其他相關問題也就隨之輕易解決。", origin: "《晉書·杜預傳》：「近如破竹，數節之後，皆迎刃而解。」", example: "只要把最關鍵的幾何定理搞懂，這整組題型就會迎刃而解。" },
+            { idiom: "同舟共濟", zhuyin: "ㄊㄨㄥˊ ㄓㄡ ㄍㄨㄥˋ ㄐㄧˋ", diff: "easy", meaning: "比喻利害利害相關，團結互助，共同戰勝困難。", origin: "《孫子·九地》：「夫吳人與越人相惡也，當其同舟而濟。」", example: "面對這次關乎班級榮譽的競賽，全班同學同舟共濟、全力以赴。" },
+            { idiom: "大公無私", zhuyin: "ㄉㄚˋ ㄍㄨㄥ ㄨˊ ㄙ", diff: "easy", meaning: "形容秉公處理，完全沒有私心。", origin: "《漢書·賈誼傳》：「大公無私，秉正不阿。」", example: "身為學生會計評審，他審查預算時態度嚴謹，大公無私。" },
+            { idiom: "美不勝收", zhuyin: "ㄇㄟˇ ㄅㄨˋ ㄕㄥˋ ㄕㄡ", diff: "easy", meaning: "形容美好的事物太多，無法盡收眼底。", origin: "清·錢泳《履園叢話》：「文物豐富，美不勝收。」", example: "校慶特展陳列了許多優秀的學生文藝創作，令人讚嘆、美不勝收。" },
+            { idiom: "實事求是", zhuyin: "ㄕˊ ㄕˋ ㄑㄧㄡˊ ㄕˋ", diff: "easy", meaning: "指從實際情況出發，探求客觀事物的真實規律。", origin: "《漢書·河間獻王劉德傳》：「修學好古，實事求是。」", example: "做自然科學實驗必須抱持實事求是的精神，不能偽造數據。" },
+            { idiom: "一字千金", zhuyin: "ㄧ ㄗˋ ㄑㄧㄢ ㄐㄧㄣ", diff: "easy", meaning: "形容文章寫得極好，字字精妙，價值極高。", origin: "《史記·呂不韋列傳》：「布咸陽市門，懸千金其上……有能增損一字者予千金。」", example: "名家這篇散文文筆高超，讀來令人齒頰留香，真是一字千金。" },
+            { idiom: "懸樑刺股", zhuyin: "ㄒㄩㄢˊ ㄌㄧㄤˊ ㄘˋ ㄍㄨˇ", diff: "easy", meaning: "形容刻苦學習、發憤讀書的精神。", origin: "《戰國策·秦策一》與《後漢書·孫敬傳》典故合稱。", example: "國三備考期間，他拿出懸樑刺股的精神，終於考上理想志願。" },
+            { idiom: "望梅止渴", zhuyin: "ㄨㄤˋ ㄇㄟˊ ㄓˇ ㄎㄜˇ", diff: "easy", meaning: "比喻用空想來慰藉自己。", origin: "南朝宋·劉義慶《世說新語·假譎》：「魏武行役，官士失水……曹操曰：前有大梅林……官士聞之，口皆出水。」", example: "若不親自下功夫練習演練，光看範文也只是望梅止渴。" },
+            { idiom: "溫故知新", zhuyin: "ㄨㄣ ㄍㄨˋ ㄓ ㄒㄧㄣ", diff: "easy", meaning: "溫習舊有的知識，能從中有新的體會與理解。", origin: "《論語·為政》：「溫故而知新，可以為師矣。」", example: "每次段考前認真訂正舊考卷，溫故知新，更能鞏固觀念。" },
+            { idiom: "妙筆生花", zhuyin: "ㄇㄧㄠˋ ㄅㄧˇ ㄕㄥ ㄏㄨㄚ", diff: "easy", meaning: "比喻文筆精妙，寫出的文章極為優美。", origin: "五代·王仁裕《開元天寶遺事》：「李白夢筆頭生花，後天才贍逸。」", example: "作家用妙筆生花的文采，將校園歲月描摹得躍然紙上。" },
+            { idiom: "舉一反三", zhuyin: "ㄐㄩˇ ㄧ ㄈㄢˇ ㄙㄢ", diff: "easy", meaning: "指學會一個道理，就能類推瞭解其他相關的事物。", origin: "《論語·述而》：「舉一隅不以三隅反，則不復也。」", example: "學習數理邏輯最重要的是理解原理，才能舉一反三解出變形題。" },
+            { idiom: "腳踏實地", zhuyin: "ㄐㄧㄠˇ ㄊㄚˋ ㄕˊ ㄉㄧˋ", diff: "easy", meaning: "比喻做事踏實認真，不浮誇、不冒進。", origin: "《宋史·司馬光傳》：「司馬光腳踏實地，光明磊落。」", example: "想要在學術領域有所成，唯有腳踏實地累積實力別無捷徑。" },
+            { idiom: "天道酬勤", zhuyin: "ㄊㄧㄢ ㄉㄠˋ ㄔㄡˊ ㄑㄧㄣˊ", diff: "easy", meaning: "上天會酬報勤勞的人，指只要付出一分努力就會有一分收穫。", origin: "《周易》乾卦天行健與尚書勤政思想延展。", example: "他深信天道酬勤，經過多年堅持不懈地練習，終獲金牌。" },
+            { idiom: "名落孫山", zhuyin: "ㄇㄧㄥˊ ㄌㄨㄛˋ ㄙㄨㄣ ㄕㄢ", diff: "easy", meaning: "指考試未被錄取。", origin: "宋·范公偁《過庭錄》：「孫山榜末，後人名落孫山外。」", example: "雖然這次社團幹部選拔名落孫山，但他依然積極參與服務。" },
+            { idiom: "獨一無二", zhuyin: "ㄉㄨˊ ㄧ ㄨˊ ㄦˋ", diff: "easy", meaning: "沒有相同的，形容非常獨特尊貴。", origin: "宋·嚴羽《滄浪詩話》：「獨一無二，不可替代。」", example: "每位高中生的學習歷程與生活經驗都是獨一無二的資產。" },
+            { idiom: "投石問路", zhuyin: "ㄊㄡˊ ㄕˊ ㄨㄣˋ ㄌㄨˋ", diff: "easy", meaning: "比喻先進行試探，以了解情況發展。", origin: "清·徐珂《清稗類鈔》常見江湖用語。", example: "在決定專題論文題目之前，我們可以先寫小論文投石問路。" },
+            { idiom: "深思熟慮", zhuyin: "ㄕㄣ ㄙ ㄕㄨˊ ㄌㄩˋ", diff: "easy", meaning: "經過深入且週密的思考與考量。", origin: "《勝天籠》：「深思熟慮，方可舉事。」", example: "選擇高中選修課程需要深思熟慮，結合自己的興趣與志向。" },
+            { idiom: "四海為家", zhuyin: "ㄙˋ ㄏㄞˇ ㄨㄟˊ ㄐㄧㄚ", diff: "easy", meaning: "指人志向遠大，不留戀故土，或形容漂泊不定。", origin: "《漢書·高帝紀》：「且夫天子以四海為家。」", example: "地質學家為了科學研究經常四海為家，奔波於世界各地。" },
+            { idiom: "自強不息", zhuyin: "ㄗˋ ㄑㄧㄤˊ ㄅㄨˋ ㄒㄧˊ", diff: "easy", meaning: "自己努力向上，永不懈怠努力。", origin: "《周易·乾卦》：「天行健，君子以自強不息。」", example: "身處逆境更要具備自強不息的精神，靠努力翻轉人生。" },
+            { idiom: "順水推舟", zhuyin: "ㄕㄨㄣˋ ㄕㄨㄟˇ ㄊㄨㄟ ㄓㄡ", diff: "easy", meaning: "順著水流推船，比喻順應形勢做事，省力順利。", origin: "元·關漢卿《救風塵》：「順水推舟，將計就計。」", example: "既然大家都提議這週進行專題討論，隊長便順水推舟答應了。" },
+
+            // --- 中等 (60首：國高中常見會考與學測必備) ---
+            { idiom: "邯鄲學步", zhuyin: "ㄏㄢˊ ㄉㄢ ㄒㄩㄝˊ ㄅㄨˋ", diff: "medium", meaning: "比喻模仿他人不成，反而失去了自己原有的本領。", origin: "《莊子·秋水》：「未得國能，又失其故行矣，直匍匐而歸耳。」", example: "寫作風格要有自己的特色，盲目模仿大師風格往往只會邯鄲學步。" },
+            { idiom: "怙惡不悛", zhuyin: "ㄏㄨˋ ㄜˋ ㄅㄨˋ ㄑㄩㄢ", diff: "medium", meaning: "堅持作惡，不肯悔改。", origin: "《左傳·隱公六年》：「惡不悛，亡自各也。」", example: "對於這種怙惡不悛的慣犯，法律必須給予嚴厲的制裁。" },
+            { idiom: "越俎代庖", zhuyin: "ㄩㄝˋ ㄗㄨˇ ㄉㄞˋ ㄆㄠˊ", diff: "medium", meaning: "比喻超越自己的職權範圍，替別人辦理事務。", origin: "《莊子·逍遙遊》：「庖人雖不治庖，庖人不越俎而代之矣。」", example: "這屬於活動公關組的職責，我們身為文宣組不便越俎代庖。" },
+            { idiom: "滄海一粟", zhuyin: "ㄘㄤ ㄏㄞ ㄧ ㄙㄨˋ", diff: "medium", meaning: "比喻非常微小，在浩瀚宇宙或歷史中微不足道。", origin: "宋·蘇軾《赤壁賦》：「寄蜉蝣於天地，渺滄海之一粟。」", example: "站在浩瀚的宇宙星空下，人類個體不過是滄海一粟。" },
+            { idiom: "韋編三絕", zhuyin: "ㄨㄟˊ ㄅㄧㄢ ㄙㄢ ㄐㄩㄝˊ", diff: "medium", meaning: "形容讀書勤奮刻苦，反覆研讀書籍。", origin: "《史記·孔子世家》：「孔子晚而喜《易》……讀《易》，韋編三絕。」", example: "他拿出韋編三絕的精神準備分科測驗，最終順利錄取第一志願。" },
+            { idiom: "洛陽紙貴", zhuyin: "ㄌㄨㄛˋ ㄧㄤˊ ㄓˇ ㄍㄨㄟˋ", diff: "medium", meaning: "形容著作極受歡迎，廣為流傳。", origin: "《晉書·左思傳》：「豪貴之家競相傳寫，洛陽為之紙貴。」", example: "這本青春文學作品一經出版便引發購買熱潮，一時洛陽紙貴。" },
+            { idiom: "投筆從戎", zhuyin: "ㄊㄡˊ ㄅㄧˇ ㄘㄨㄥˊ ㄖㄨㄥˊ", diff: "medium", meaning: "指棄文就武，投身軍旅以報效國家。", origin: "《後漢書·班超傳》：「大丈夫無他志略，猶當效傅介子、張騫立功異域。」", example: "青年班超投筆從戎，立志為國家開拓邊疆。" },
+            { idiom: "望洋興歎", zhuyin: "ㄨㄤˋ ㄧㄤˊ ㄒㄧㄥ ㄊㄢˋ", diff: "medium", meaning: "比喻因能力不足或條件不具備而感到無能為力。", origin: "《莊子·秋水》：「於是焉河伯始旋其面目，望洋向若而嘆。」", example: "面對這道高階競賽題目，許多參賽者只能望洋興歎。" },
+            { idiom: "請纓報國", zhuyin: "ㄑㄧㄥˇ ㄧㄥ ㄅㄠˋ ㄍㄨㄛˊ", diff: "medium", meaning: "主動請求擔負保衛國家或重大艱巨的任務。", origin: "《漢書·終軍傳》：「軍自請曰：願受長纓，必羈南越王而致之闕下。」", example: "面對偏鄉教育資源短缺，許多青年教師主動請纓報國前往服務。" },
+            { idiom: "破鏡重圓", zhuyin: "ㄆㄛˋ ㄐㄧㄥˋ ㄔㄨㄥˊ ㄩㄢˊ", diff: "medium", meaning: "比喻夫妻或情侶離散後重新團聚或復合。", origin: "唐·孟棨《本事詩·情感》記載徐德言與樂昌公主破鏡相約的故事。", example: "經過多年的誤會與分離，他們兩人終於破鏡重圓。" },
+            { idiom: "巧言令色", zhuyin: "ㄑㄧㄠˇ ㄧㄢˊ ㄌㄧㄥˋ ㄙㄜˋ", diff: "medium", meaning: "用花言巧語和偽善的面貌來討好他人。", origin: "《論語·學而》：「子曰：巧言令色，鮮矣仁！」", example: "那種巧言令色、只會奉承他人的人，往往不值得深交。" },
+            { idiom: "魚目混珠", zhuyin: "ㄩˊ ㄇㄨˋ ㄏㄨㄣˋ ㄓㄨ", diff: "medium", meaning: "比喻以假亂真，以此物充彼物。", origin: "漢·魏伯陽《參同契》：「魚目豈為珠，蓬蒿不成檟。」", example: "網路文獻資料良莠不齊，引用時務必審慎辨識，切勿魚目混珠。" },
+            { idiom: "鍥而不捨", zhuyin: "ㄑㄧㄝˋ ㄦˊ ㄅㄨˋ ㄕㄜˇ", diff: "medium", meaning: "比喻堅持到底，永不放棄努力。", origin: "《荀子·勸學》：「鍥而舍之，朽木不折；鍥而不舍，金石可鏤。」", example: "憑著鍥而不捨的精神，高中探究團隊終於突破了實驗瓶頸。" },
+            { idiom: "風聲鶴唳", zhuyin: "ㄈㄥ ㄕㄥ ㄏㄜˋ ㄌㄧˋ", diff: "medium", meaning: "形容極度驚恐疑懼，自相驚擾。", origin: "《晉書·謝玄傳》：「聞風聲鶴唳，皆以為王師已至。」", example: "考試前夕各種謠言漫天飛舞，弄得班上風聲鶴唳、人心惶惶。" },
+            { idiom: "草木皆兵", zhuyin: "ㄠˇ ㄇㄨˋ ㄐㄧㄝ ㄅㄧㄥ", diff: "medium", meaning: "形容極度驚恐疑懼的心理狀態。", origin: "《晉書·苻堅載記》：「望八公山山上草木，皆以為晉兵。」", example: "敗退的敵軍神經過度緊張，稍微有點風吹草動就草木皆兵。" },
+            { idiom: "煮豆燃萁", zhuyin: "ㄓㄨˇ ㄉㄡˋ ㄖㄢˊ ㄑㄧˊ", diff: "medium", meaning: "比喻骨肉相殘或親兄弟互相迫害。", origin: "南朝宋·劉義慶《世說新語》曹植《七步詩》：「煮豆燃豆萁，豆在釜中泣。」", example: "為了爭奪家族遺產，他們兄弟倆煮豆燃萁，令人唏噓。" },
+            { idiom: "瓜田李下", zhuyin: "ㄍㄨㄚ ㄊㄧㄢˊ ㄌㄧˇ ㄒㄧㄚˋ", diff: "medium", meaning: "比喻容易引起懷疑或誤會的場合。", origin: "古樂府《君子行》：「瓜田不納履，李下不整冠。」", example: "處理學生會經費一定要公開透明，避開瓜田李下的嫌疑。" },
+            { idiom: "按圖索驥", zhuyin: "ㄢˋ ㄊㄨˊ ㄙㄨㄛˇ ㄐㄧˋ", diff: "medium", meaning: "比喻拘泥成法，缺乏靈活性，或照線索尋找。", origin: "《漢書·梅福傳》；明·楊慎《藝林伐山》伯樂《相馬經》。", example: "做自主學習研究不能光靠按圖索驥，還需根據實驗結果彈性修正。" },
+            { idiom: "南轅北轍", zhuyin: "ㄋㄢˊ ㄩㄢˊ ㄅㄟˇ ㄓㄜˇ", diff: "medium", meaning: "比喻行動和目的完全相反。", origin: "《戰國策·魏策四》：「猶至楚而北行也。」", example: "你想提升學測成績卻整天沉迷手遊，這豈不是南轅北轍？" },
+            { idiom: "投鼠忌器", zhuyin: "ㄊㄡˊ ㄕㄨˇ ㄐㄧˋ ㄑㄧˋ", diff: "medium", meaning: "想打老鼠又怕打壞器物，比喻做事有顧忌，不敢放手採取行動。", origin: "《漢書·賈誼傳》：「里諺曰：欲投鼠而忌器。」", example: "由於處理過程涉及多方利益，校方投鼠忌器，遲遲不敢宣佈新規。" },
+            { idiom: "三顧茅廬", zhuyin: "ㄙㄢ ㄍㄨˋ ㄇㄠˊ ㄌㄨˊ", diff: "medium", meaning: "比喻誠心誠意地一再邀請賢才。", origin: "諸葛亮《出師表》：「先帝不以臣卑鄙，三顧臣於草廬之中。」", example: "為了邀請這位知名教授前來講座，社長三顧茅廬，終獲首肯。" },
+            { idiom: "初出茅廬", zhuyin: "ㄔㄨ ㄔㄨ ㄇㄠˊ ㄌㄨˊ", diff: "medium", meaning: "比喻剛進入社會或剛開始工作，缺乏經驗。", origin: "元·羅貫中《三國演義》：「直須驚破膽，初出茅廬第一功。」", example: "他只是個初出茅廬的高中實習學生，還請各位學長姐多加指教。" },
+            { idiom: "聲東擊西", zhuyin: "ㄕㄥ ㄉㄨㄥ ㄐㄧˊ ㄒㄧ", diff: "medium", meaning: "表面聲張打東邊，實際攻擊西邊，比喻掩人耳目的戰術。", origin: "唐·杜佑《通典·兵六》：「聲言擊東，其實擊西。」", example: "籃球隊戰術執行極佳，利用聲東擊西成功攻下關鍵兩分。" },
+            { idiom: "居安思危", zhuyin: "ㄐㄩ ㄢ ㄙ ㄨㄟ", diff: "medium", meaning: "處於平安穩定的境地時，要隨時想到可能發生的危險。", origin: "《左傳·襄公三十一年》：「居安思危，思則有備，有備無患。」", example: "班級活動雖然目前運作順暢，但仍需居安思危，準備備案。" },
+            { idiom: "前車之鑑", zhuyin: "ㄑㄧㄢˊ ㄔㄜ ㄓ ㄐㄧㄢˋ", diff: "medium", meaning: "比喻先前的失敗經驗，可以作為後人的警惕與教訓。", origin: "《荀子·成相》：「前車已覆，後車必戒。」", example: "我們要吸取上次活動籌備不周的前車之鑑，這次務必提前檢討。" },
+            { idiom: "世外桃源", zhuyin: "ㄕˋ ㄨㄞˋ ㄊㄠˊ ㄩㄢˊ", diff: "medium", meaning: "比喻風景優美、環境安樂寧靜的理想世界。", origin: "晉·陶淵明《桃花源記》描述武陵人誤入桃源故事。", example: "這座偏遠山村空氣清新、景色宜人，簡直是世外桃源。" },
+            { idiom: "桃李滿天下", zhuyin: "ㄊㄠˊ ㄌㄧˇ ㄇㄢˇ ㄊㄧㄢ ㄒㄧㄚˋ", diff: "medium", meaning: "比喻優秀教師培育出來的學生遍布各地。", origin: "《資治通鑑·唐紀》：「狄仁傑每薦人，國老桃李遍天下。」", example: "退休的國文老師教學一生，如今桃李滿天下，深受愛戴。" },
+            { idiom: "刻骨銘心", zhuyin: "ㄎㄜˋ ㄍㄨˇ ㄇㄧㄥˊ ㄒㄧㄣ", diff: "medium", meaning: "形容感受深刻，永難忘懷。", origin: "唐·李白《上安州裴長史書》：「感激深骨，銘記於心。」", example: "高中畢業旅行的歡笑與淚水，將會是大家刻骨銘心的青春回憶。" },
+            { idiom: "孜孜不倦", zhuyin: "ㄗ ㄗ ㄅㄨˋ ㄐㄩㄢˋ", diff: "medium", meaning: "指勤奮努力，不知疲倦。", origin: "《尚書·君陳》：「唯日孜孜，無敢逸豫。」", example: "他在圖書館裡孜孜不倦地閱讀專著，展現出高度的學術熱情。" },
+            { idiom: "精益求精", zhuyin: "ㄐㄧㄥ ㄧˋ ㄑㄧㄡˊ ㄐㄧㄥ", diff: "medium", meaning: "比喻好了還求更好，追求完美。", origin: "《論語·學而》：「如切如磋，如琢如磨。」宋·朱熹集注。", example: "這份自主學習成果經過多次修正，展現精益求精的態度。" },
+            { idiom: "墨守成規", zhuyin: "ㄇㄛˋ ㄕㄡˇ ㄔㄥˊ ㄍㄨㄟ", diff: "medium", meaning: "形容思想保守，死守老規矩而不求變革。", origin: "明·黃宗羲《明儒學案》形容墨子守城演化。", example: "面對AI時代的挑戰，我們教學不能再墨守成規。" },
+            { idiom: "應接不暇", zhuyin: "ㄧㄥˋ ㄐㄧㄝ ㄅㄨˋ ㄒㄧㄚˊ", diff: "medium", meaning: "美景繁多來不及觀賞，亦形容人事務繁忙來不及應付。", origin: "南朝宋·劉義慶《世說新語·言語》：「山川自相映發，使人應接不暇。」", example: "校慶園遊會期間，熱門攤位的顧客絡繹不絕，讓同學們應接不暇。" },
+            { idiom: "滄海桑田", zhuyin: "ㄘㄤ ㄏㄞ ㄙㄤ ㄊㄧㄢ", diff: "medium", meaning: "比喻世事變化巨大，環境變遷極快。", origin: "葛洪《神仙傳·麻姑》：「麻姑自說：接侍以來，已見東海三為桑田。」", example: "不過短短幾年，這座工業區已變成科技重鎮，真是滄海桑田。" },
+            { idiom: "吹毛求瑕", zhuyin: "ㄔㄨㄟ ㄇㄠˊ ㄑㄧㄡˊ ㄒㄧㄚˊ", diff: "medium", meaning: "比喻故意挑剔毛病，尋找瑕疵。", origin: "《韓非子·大體》：「不吹毛而求小瑕。」", example: "審查報告時應著重宏觀邏輯，而非過度吹毛求瑕細枝末節。" },
+            { idiom: "飲水思源", zhuyin: "ㄧㄣˇ ㄕㄨㄟˇ ㄙ ㄩㄢˊ", diff: "medium", meaning: "比喻不忘本，感念別人的恩惠與付出。", origin: "北周·庾信《徵調曲》：「落實思樹，飲水思源。」", example: "我們能在良好的環境學習，應當飲水思源，感謝社會的付出。" },
+            { idiom: "獨善其身", zhuyin: "ㄉㄨˊ ㄕㄢˋ ㄑㄧˊ ㄕㄣ", diff: "medium", meaning: "只顧保持自身的純潔，不關心社會大眾。", origin: "《孟子·盡心上》：「窮則獨善其身，達則兼善天下。」", example: "面對班級公益事務，我們不能只是獨善其身，應積極參與。" },
+            { idiom: "兼濟天下", zhuyin: "ㄐㄧㄢ ㄐㄧˋ ㄊㄧㄢ ㄒㄧㄚˋ", diff: "medium", meaning: "廣泛造福天下百姓，胸懷大志。", origin: "《孟子·盡心上》：「達則兼善天下。」", example: "他立志攻讀公共衛生，期許自己未來能兼濟天下。" },
+            { idiom: "明察秋毫", zhuyin: "ㄇㄧㄥˊ ㄔㄚˊ ㄑㄧㄡ ㄏㄠˊ", diff: "medium", meaning: "形容眼力敏銳，能看清極微小的微粒，亦指觀察入微。", origin: "《孟子·梁惠王上》：「明足以察秋毫之末。」", example: "國文老師審閱小論文極為嚴謹，明察秋毫，連標點符號也不放過。" },
+            { idiom: "防微杜漸", zhuyin: "ㄈㄤˊ ㄨㄟ ㄉㄨˋ ㄐㄧㄢˋ", diff: "medium", meaning: "在錯誤或壞事剛冒頭時就及時加以制止，杜絕發展。", origin: "《後漢書·丁鴻傳》：「若絕江河，沛兮莫之能禦……防微杜漸。」", example: "維護校園安寧需要防微杜漸，發現言語霸凌傾向就應立刻輔導。" },
+            { idiom: "運籌帷幄", zhuyin: "ㄩㄣˋ ㄔㄡˊ ㄨㄟˊ ㄨㄛˋ", diff: "medium", meaning: "在軍帳中策劃謀略，比喻謀劃策劃大局。", origin: "《史記·高祖本紀》：「夫運籌帷幄之中，決勝千里之外，吾不如子房。」", example: "活動總幹事運籌帷幄，帶領團隊圓滿完成三校聯展。" },
+            { idiom: "望塵莫及", zhuyin: "ㄨㄤˋ ㄔㄣˊ ㄇㄛˋ ㄐㄧˊ", diff: "medium", meaning: "看見前面車馬揚起的灰塵而趕不上，比喻遠遠落後。", origin: "《莊子·田子方》：「夫子步亦步，夫子趨亦趨……夫子奔逸絕塵，而妙子瞻望娉乎後矣。」", example: "他在資訊奧林匹亞競賽展現的高超實力，令許多同齡選手望塵莫及。" },
+            { idiom: "拋磚引玉", zhuyin: "ㄆㄠ ㄓㄨㄢ ㄧㄣˇ ㄩˋ", diff: "medium", meaning: "比喻用自己粗淺的言論或作品引出別人優秀的發表。", origin: "宋·釋道原《景德傳燈錄》趙州和尚典故。", example: "今天由我先發表想法拋磚引玉，希望各位同學積極提供寶貴意見。" },
+            { idiom: "投桃報李", zhuyin: "ㄊㄡˊ ㄊㄠˊ ㄅㄠˋ ㄌㄧˇ", diff: "medium", meaning: "比喻朋友之間互相贈答，友好往來。", origin: "《詩經·大雅·抑》：「投我以桃，報之以李。」", example: "班級之間互相支援活動器材，投桃報李，展現良好情誼。" },
+            { idiom: "莫衷一是", zhuyin: "ㄇㄛˋ ㄓㄨㄥ ㄧ ㄕˋ", diff: "medium", meaning: "意見紛紜，無法得出一致的結論。", origin: "清·吳趼人《痛史》：「眾人議論紛紛，莫衷一是。」", example: "關於畢業旅行的去向大家討論了半天，依然莫衷一是。" },
+            { idiom: "眾口鑠金", zhuyin: "ㄓㄨㄥˋ ㄎㄡˇ ㄕㄨㄛˋ ㄐㄧㄣ", diff: "medium", meaning: "比喻輿論力量強大，眾口一詞能混淆是非。", origin: "《國語·周語下》：「眾心成城，眾口鑠金。」", example: "網路時代資訊雜亂，面對眾口鑠金的謠言，我們應保持理性思考。" },
+            { idiom: "積羽沉舟", zhuyin: "ㄐㄧ ㄩˇ ㄔㄣˊ ㄓㄡ", diff: "medium", meaning: "羽毛雖輕，積攢多了也能壓沉大船，比喻小患不絕會造成重災。", origin: "《戰國策·魏策一》：「積羽沉舟，群輕折軸。」", example: "平時忽視細微壞習慣，日積月累恐會積羽沉舟造成傷害。" },
+            { idiom: "獨闢蹊徑", zhuyin: "ㄉㄨˊ ㄆㄧˋ ㄒㄧ ㄐㄧㄥˋ", diff: "medium", meaning: "自己開闢一條新路，比喻獨創新的思路或方法。", origin: "清·葉燮《原詩·內篇》：「獨闢蹊徑，卓然自成一家。」", example: "他在這篇科展作品中獨闢蹊徑，採用全新的實驗角度。" },
+            { idiom: "別開生面", zhuyin: "ㄅㄧㄝˊ ㄎㄞ ㄕㄥ ㄇㄧㄢˋ", diff: "medium", meaning: "比喻開創新的局面或形式，別具一格。", origin: "唐·杜甫《丹青引》：「詔謂將軍拂素絲，開府生面畫畫奇。」", example: "社團舉辦了一場別開生面的線上迎新會，吸引眾多新生參加。" },
+            { idiom: "釜底抽薪", zhuyin: "ㄈㄨˇ ㄉㄧˇ ㄔㄡ ㄒㄧㄣ", diff: "medium", meaning: "從鍋底抽掉柴火，比喻從根本上解決問題。", origin: "《漢書·枚乘傳》：「抽薪止沸，剪草除根。」", example: "要徹底解決學習焦慮，釜底抽薪的方法是建立良好的作息與進度。" },
+            { idiom: "聲淚俱下", zhuyin: "ㄕㄥ ㄌㄟˋ ㄐㄩˋ ㄒㄧㄚˋ", diff: "medium", meaning: "說話時聲音哽咽，眼淚流下，形容極度悲傷動情。", origin: "《晉書·王導傳》：「導亦聲淚俱下，朝野感之。」", example: "演講者在講台上聲淚俱下地分享成長奮鬥史，動人至深。" },
+            { idiom: "嘔心瀝血", zhuyin: "ㄡˇ ㄒㄧㄣ ㄌㄧˋ ㄒㄩㄝˋ", diff: "medium", meaning: "形容用盡心思，耗費極大的心血。", origin: "唐·韓愈《歸彭城》詩與李賀寫詩典故。", example: "這本畢業紀念冊是編輯組同學們嘔心瀝血製作的結晶。" },
+            { idiom: "專心致志", zhuyin: "ㄓㄨㄢ ㄒㄧㄣ ㄓˋ ㄓˋ", diff: "medium", meaning: "心思專一，精力高度集中。", origin: "《孟子·告子上》：「今夫弈之為數，小數也，不專心致志，則不得也。」", example: "課堂上只要專心致志地聽講，課後複習就能事半功倍。" },
+            { idiom: "兩袖清風", zhuyin: "ㄌㄧㄤˇ ㄒㄧㄡˋ ㄑㄧㄥ ㄈㄥ", diff: "medium", meaning: "形容做官廉潔，毫無私產，亦比喻貧窮或瀟灑無負擔。", origin: "明·于謙《入京詩》：「清風兩袖朝天去，免得閭閻話短長。」", example: "于謙為官一生兩袖清風，其高尚人格流芳百世。" },
+            { idiom: "卓爾不群", zhuyin: "ㄓㄨㄛˊ ㄦˇ ㄅㄨˋ ㄑㄩㄣ", diff: "medium", meaning: "優秀卓越，超出一般常人。", origin: "《漢書·景十三王傳》：「夫唯大雅，卓爾不群。」", example: "他在文學創作上的天賦卓爾不群，屢獲全國競賽大獎。" },
+            { idiom: "病入膏肓", zhuyin: "ㄅㄧㄥˋ ㄖㄨˋ ㄍㄠ ㄏㄨㄤ", diff: "medium", meaning: "比喻病情嚴重無法救治，亦比喻事態發展到無法挽回的程度。", origin: "《左傳·成公十年》：「疾不可為也，在膏之上，肓之下。」", example: "如果不即時改善沉迷網路問題，等壞習慣病入膏肓就難改了。" },
+            { idiom: "決勝千里", zhuyin: "ㄐㄩㄝˊ ㄕㄥˋ ㄑㄧㄢ ㄌㄧˇ", diff: "medium", meaning: "形容戰略謀劃精確高超，能在遠方決定勝負。", origin: "《史記·高祖本紀》：「運籌帷幄之中，決勝千里之外。」", example: "高中隊長在賽前詳細分析對手攻防數據，展現決勝千里之姿。" },
+            { idiom: "靜影沉璧", zhuyin: "ㄐㄧㄥˋ ㄧㄥˇ ㄔㄣˊ ㄅㄧˋ", diff: "medium", meaning: "平靜的水面上月影如同沉入水中的美玉，形容月夜水景幽靜。", origin: "宋·范仲淹《岳陽樓記》：「皓月千里，浮光躍金，靜影沉璧。」", example: "漫步在湖畔，看著遠處靜影沉璧的景色，令人感到格外寧靜。" },
+            { idiom: "浮光躍金", zhuyin: "ㄈㄨˊ ㄍㄨㄤ ㄩㄝˋ ㄐㄧㄣ", diff: "medium", meaning: "波浪起伏時微波反射太陽或月亮光芒，如同金光跳躍。", origin: "宋·范仲淹《岳陽樓記》：「皓月千里，浮光躍金。」", example: "夕陽西下，海面上浮光躍金，景致十分壯麗。" },
+            { idiom: "吞舟之魚", zhuyin: "ㄊㄨㄣ ㄓㄡ ㄓ ㄩˊ", diff: "medium", meaning: "能吞下大船的大魚，比喻氣魄宏大或才能卓絕的人。", origin: "《莊子·庚桑楚》：「吞舟之魚，碭而陸，則蟻能苦之。」", example: "青年學生當以吞舟之魚自許，懷抱遠大志向投身社會。" },
+            { idiom: "高瞻遠矚", zhuyin: "ㄍㄠ ㄓㄢ ㄩㄢˇ ㄓㄨˇ", diff: "medium", meaning: "站得高看得遠，比喻眼光遠大，前瞻性強。", origin: "漢·王充《論衡·別通》遠瞻觀念拓展。", example: "學校推動跨領域課程具有高瞻遠矚的眼光，深受家長肯定。" },
+
+            // --- 困難 (60首：高中會考高分群與學測/分科優等典故) ---
+            { idiom: "篳路藍縷", zhuyin: "ㄅㄧˋ ㄌㄨˋ ㄌㄢˊ ㄌㄩˇ", diff: "hard", meaning: "駕柴車，穿破衣，形容創業或開闢過程的艱辛勞苦。", origin: "《左傳·宣公十二年》：「訓之以篳路藍縷，以山林荒蕪。」", example: "先輩們篳路藍縷建立起這所百年名校，我們當珍惜今日優良環境。" },
+            { idiom: "觥籌交錯", zhuyin: "ㄍㄨㄥ ㄡˊ ㄐㄧㄠ ㄘㄨㄛˋ", diff: "hard", meaning: "酒杯和酒籌交互錯雜，形容宴飲聚會時熱鬧歡快的場面。", origin: "宋·歐陽修《醉翁亭記》：「射者中，弈者勝，觥籌交錯，起坐而喧嘩者，眾賓歡也。」", example: "慶功宴上大家觥籌交錯、談笑風生，共同慶祝這難得的勝利。" },
+            { idiom: "尾生抱柱", zhuyin: "ㄨㄟˇ ㄕㄥ ㄅㄠˋ ㄓㄨˋ", diff: "hard", meaning: "比喻堅守信約，至死不渝，亦諷刺不知變通、死腦筋。", origin: "《莊子·盜跖》：「尾生與女子期於梁下，女子不來，水至不去，抱梁柱而死。」", example: "守信固然是美德，但若像尾生抱柱般不知變通，有時反而害了自己。" },
+            { idiom: "尸位素餐", zhuyin: "ㄕ ㄨㄟˋ ㄙㄨˋ ㄘㄢ", diff: "hard", meaning: "空占著職位，白拿薪水而不做正事。", origin: "《漢書·朱雲傳》：「今朝廷大臣，上不能匡主，下亡以益民，皆尸位素餐。」", example: "身為幹部應當盡職盡責，絕不能尸位素餐、虛度光陰。" },
+            { idiom: "薪盡火傳", zhuyin: "ㄒㄧㄣ ㄐㄧㄣˋ ㄏㄨㄛˇ ㄔㄨㄢ", diff: "hard", meaning: "比喻學問、技藝或精神世代相傳，綿延不絕。", origin: "《莊子·養生主》：「指窮於為薪，火傳也，不知其盡也。」", example: "這項傳統工藝經過幾代高中師生的推廣，薪盡火傳，煥發新活力。" },
+            { idiom: "倚馬可待", zhuyin: "ㄧˇ ㄇㄚˇ ㄎㄜˇ ㄉㄞˋ", diff: "hard", meaning: "形容文思敏捷，寫作速度極快。", origin: "南朝宋·劉義慶《世說新語·文學》：「桓宣武北征，袁虎靠馬撰詞，俄得七紙。」", example: "他才思敏捷，撰寫新詩對他而言簡直是倚馬可待。" },
+            { idiom: "莫逆之交", zhuyin: "ㄇㄛˋ ㄋㄧˋ ㄓ ㄐㄧㄠ", diff: "hard", meaning: "指情投意合、毫無違逆的至交好友。", origin: "《莊子·大宗師》：「四人相視而笑，莫逆於心，遂相與為友。」", example: "他們從國中到高中一直並肩作戰，早已是莫逆之交。" },
+            { idiom: "噤若寒蟬", zhuyin: "ㄐㄧㄣˋ ㄖㄨㄛˋ ㄏㄢˊ ㄔㄢˊ", diff: "hard", meaning: "比喻因害怕或有顧慮而不敢說話。", origin: "《後漢書·杜密傳》：「見禮上賓，艾能正議，噤若寒蟬。」", example: "教官一走進教室，原本吵鬧的同學們頓時噤若寒蟬。" },
+            { idiom: "蓬生麻中", zhuyin: "ㄆㄥ ㄕㄥ ㄇㄚˊ ㄓㄨㄥ", diff: "hard", meaning: "比喻良好的環境對人的性格與品質有良善的薰陶作用。", origin: "《荀子·勸學》：「蓬生麻中，不扶而直；白沙在涅，與之俱黑。」", example: "蓬生麻中不扶自直，優秀的班級讀書風氣對學業提升影響深遠。" },
+            { idiom: "一暴十寒", zhuyin: "ㄧ ㄆㄨˋ ㄕˊ ㄏㄢˊ", diff: "hard", meaning: "比喻學習或工作缺乏恆心，勤奮少而怠惰多。", origin: "《孟子·告子上》：「一日暴之，十日寒之，未有能生者也。」", example: "語言學習最忌諱一暴十寒，唯有每日堅持才能掌握考題技巧。" },
+            { idiom: "沆瀣一氣", zhuyin: "ㄏㄤˋ ㄒㄧㄝˋ ㄧ ㄑㄧˋ", diff: "hard", meaning: "比喻氣味相投的人勾結連成一氣（多指壞人作惡）。", origin: "宋·錢易《南部新書·戊集》「座主審氣，沆瀣一氣」典故。", example: "這幾個人沆瀣一氣，在網路上散播不實謠言，遭受社會嚴厲譴責。" },
+            { idiom: "提綱挈領", zhuyin: "ㄊㄧˊ ㄍㄤ ㄑㄧㄝˋ ㄌㄧㄥˇ", diff: "hard", meaning: "比喻抓住事物的關鍵與主要綱領。", origin: "《荀子·勸學》：「若提綱挈領，網在綱，有條而不紊。」", example: "老師這節課提綱挈領地整理了中國史發展脈絡，讓人一目了然。" },
+            { idiom: "不脛而走", zhuyin: "ㄅㄨˋ ㄐㄧㄥˋ ㄦˊ ㄗㄡˇ", diff: "hard", meaning: "比喻消息或名聲傳播極快，迅速流傳開來。", origin: "漢·孔融《論盛孝章書》：「珠玉無脛而自至者，以人好之也。」", example: "他獲選國際科學展覽會代表的消息不脛而走，全校師生皆感榮耀。" },
+            { idiom: "方興未艾", zhuyin: "ㄈㄤ ㄒㄧㄥ ㄨㄟˋ ㄞˋ", diff: "hard", meaning: "形容事物正在蓬勃發展，不會停止。", origin: "宋·陳亮《文章正宗序》：「自漢以來，文章方興未艾。」", example: "高中生成能自主學習與AI技術應用的浪潮正方興未艾。" },
+            { idiom: "退避三舍", zhuyin: "ㄊㄨㄟˋ ㄅㄧˋ ㄙㄢ ㄕㄜˋ", diff: "hard", meaning: "比喻對人主動讓步，避免發生衝突。", origin: "《左傳·僖公二十三年》：「晉楚治兵，遇於中原，其辟君三舍。」", example: "面對他這種咄咄逼人的傲慢態度，我選擇退避三舍、不與其爭論。" },
+            { idiom: "瑕不掩瑜", zhuyin: "ㄒㄧㄚˊ ㄅㄨˋ ㄧㄢˇ ㄩˊ", diff: "hard", meaning: "缺點掩蓋不了優點，比喻整體依然非常完美優秀。", origin: "《禮記·聘義》：「瑕不掩瑜，瑜不掩瑕，忠也。」", example: "這篇散文雖有少許錯別字，但瑕不掩瑜，感情極為真摯高遠。" },
+            { idiom: "暴虎馮河", zhuyin: "ㄅㄠˋ ㄏㄨˇ ㄆㄧㄥˊ ㄏㄜˊ", diff: "hard", meaning: "比喻有勇無謀，冒險蠻幹。", origin: "《論語·述而》：「暴虎馮河，死而無悔者，吾不與也。」", example: "做任何決策都需要理性分析數據，切忌暴虎馮河、衝動行事。" },
+            { idiom: "汗牛充棟", zhuyin: "ㄏㄢˋ ㄋㄧㄡˊ ㄔㄨㄥ ㄉㄨㄥˋ", diff: "hard", meaning: "形容書籍充盈，藏書極多。", origin: "唐·柳宗元《陸文通先生墓表》：「處則充棟宇，出則汗牛馬。」", example: "這座國家圖書館裡的古典文獻汗牛充棟，吸引無數學者探訪。" },
+            { idiom: "徙木賞金", zhuyin: "ㄒㄧˇ ㄇㄨˋ ㄕㄤˇ ㄐㄧㄣ", diff: "hard", meaning: "比喻樹立誠信，講求信用，以取信於民。", origin: "《史記·商君列傳》商鞅變法立三丈之木於國都市南門典故。", example: "學生會推行新政必須徙木賞金，才能建立公信力與同窗信任。" },
+            { idiom: "郢書燕說", zhuyin: "ㄧㄥˇ ㄕㄨ ㄧㄢˋ ㄕㄨㄛ", diff: "hard", meaning: "比喻穿鑿附會，曲解文字的原意。", origin: "《韓非子·外儲說左上》郢人夜書舉燭，燕相收而說之典故。", example: "閱讀古典文學應尊重歷史背景，切勿郢書燕說、過度牽強附會。" },
+            { idiom: "白駒過隙", zhuyin: "ㄅㄞˊ ㄐㄩ ㄍㄨㄛˋ ㄒㄧˋ", diff: "hard", meaning: "形容時間過得極快，如同白馬自縫隙飛馳而過。", origin: "《莊子·知北遊》：「人生天地之間，若白駒之過隙，忽然而已。」", example: "歲月如白駒過隙，轉眼間三年高中生活即將劃下句點。" },
+            { idiom: "大智若愚", zhuyin: "ㄉㄚˋ ㄓˋ ㄖㄨㄛˋ ㄩˊ", diff: "hard", meaning: "真正有大智慧的人，表面看起來平平無奇甚至有些愚笨。", origin: "宋·蘇軾《賀歐陽少師致仕啟》：「大勇若怯，大智若愚。」", example: "那位指導老師平時說話樸實無華，但在關鍵時刻總展現大智若愚的眼界。" },
+            { idiom: "臨淵羨魚", zhuyin: "ㄌㄧㄣˊ ㄩㄢ ㄒㄧㄢˋ ㄩˊ", diff: "hard", meaning: "比喻空有願望，不如採取實際行動。", origin: "《淮南子·說林訓》：「臨淵羨魚，不如退而結網。」", example: "與其臨淵羨魚讚嘆別人的成績，不如現在就靜下心來開始讀書。" },
+            { idiom: "膠柱鼓瑟", zhuyin: "ㄐㄧㄠˇ ㄓㄨˋ ㄍㄨˇ ㄙㄜˋ", diff: "hard", meaning: "比喻固執拘泥，不知變通。", origin: "《史記·廉頗藺相如列傳》：「王以名使括，若膠柱而鼓瑟耳。」", example: "學習文科不能膠柱鼓瑟死記硬背，要靈活貫通脈絡。" },
+            { idiom: "橘化為枳", zhuyin: "ㄐㄩˊ ㄏㄨㄚˋ ㄨㄟˊ ㄓˇ", diff: "hard", meaning: "比喻環境改變，事物的性質也隨之變壞。", origin: "《晏子春秋·內篇雜下》：「橘生淮南則為橘，生於淮北則為枳。」", example: "再優秀制度若缺乏良好的文化配合，有時也會橘化為枳。" },
+            { idiom: "曲突徙薪", zhuyin: "ㄑㄩ ㄊㄨˊ ㄒㄧˇ ㄒㄧㄣ", diff: "hard", meaning: "比喻事先採取預防措施，以防患於未然。", origin: "《漢書·霍光傳》：「鄉茂不聞曲突徙薪之澤，焦頭爛額為上客耶？」", example: "校園安檢與防災演練屬於曲突徙薪之舉，務必落實。" },
+            { idiom: "焦頭爛額", zhuyin: "ㄐㄧㄠ ㄊㄡˊ ㄌㄢˋ ㄜˊ", diff: "hard", meaning: "形容極度狼狽窘迫，或為處理棘手事務而精疲力竭。", origin: "《漢書·霍光傳》典故與曲突徙薪相對應。", example: "臨近成果發表會，活動組同學忙得焦頭爛額、不可開交。" },
+            { idiom: "輪扁斫輪", zhuyin: "ㄌㄨㄣˊ ㄅㄧㄢˇ ㄓㄨㄛˊ ㄌㄨㄣˊ", diff: "hard", meaning: "比喻實踐經驗豐富，掌握了無法僅用言語傳授的精妙技巧。", origin: "《莊子·天道》輪扁與齊桓公論書談實踐典故。", example: "真正高超的手藝如同輪扁斫輪，需要親身實踐方能領悟。" },
+            { idiom: "庖丁解牛", zhuyin: "ㄆㄠˊ ㄉㄧㄥ ㄐㄧㄝ ㄋㄧㄡˊ", diff: "hard", meaning: "比喻技術熟練高超，掌握規律，運作自如。", origin: "《莊子·養生主》：「庖丁為文惠君解牛，手之所觸，肩之所倚，砉然嚮然。」", example: "教授解講微積分原理條理分明、庖丁解牛，學生一聽即懂。" },
+            { idiom: "莊周夢蝶", zhuyin: "ㄓㄨㄤ ㄓㄡ ㄇㄥˋ ㄉㄧㄝˊ", diff: "hard", meaning: "比喻人生如夢，界限難分，亦指高遠超脫的哲學境界。", origin: "《莊子·齊物論》：「昔者莊周夢為胡蝶，栩栩然胡蝶也。」", example: "讀完這篇哲理散文，令人產生莊周夢蝶般超脫之感。" },
+            { idiom: "涸轍之魚", zhuyin: "ㄏㄜˊ ㄓㄜˊ ㄓ ㄩˊ", diff: "hard", meaning: "處於乾涸車轍中的魚，比喻處境極度困難、急需救援的人。", origin: "《莊子·外物》：「周昨來，有呼周者，顧視車轍中有鮒魚焉。」", example: "面對失業家庭的困境，社會應及時伸出援手，救人於涸轍之魚。" },
+            { idiom: "螳螂捕蟬", zhuyin: "ㄊㄤˊ ㄌㄤˊ ㄅㄨˇ ㄔㄢˊ", diff: "hard", meaning: "比喻只顧眼前利益，而不顧身後潛伏的後患。", origin: "《劉向·說苑·正諫》：「螳螂捕蟬，黃雀在後。」", example: "做商業決策不可只看眼前短利，切記螳螂捕蟬黃雀在後。" },
+            { idiom: "蜀犬吠日", zhuyin: "ㄕㄨˇ ㄑㄩㄢˇ ㄈㄟˋ ㄖˋ", diff: "hard", meaning: "少見多怪，比喻因見識淺薄而對正常現象感到奇怪。", origin: "唐·柳宗元《答韋中立論師道書》：「蜀日出，而犬吠之。」", example: "這種科學原理早有定論，他的強烈質疑簡直是蜀犬吠日。" },
+            { idiom: "粵犬吠雪", zhuyin: "ㄩㄝˋ ㄑㄩㄢˇ ㄈㄟˋ ㄒㄩㄝˇ", diff: "hard", meaning: "比喻見識狹小，少見多怪。", origin: "唐·柳宗元《答韋中立論師道書》：「嶺南雪少，粵犬見雪而吠。」", example: "對於新技術的出現不必過度驚慌，以免顯得粵犬吠雪。" },
+            { idiom: "響遏行雲", zhuyin: "ㄒㄧㄤˇ ㄜˋ ㄒㄧㄥˊ ㄩㄣˊ", diff: "hard", meaning: "聲音嘹亮清翠，連雲彩都為之停下，形容歌聲高亢精妙。", origin: "《列子·湯問》：「薛譚學謳於秦青……撫節悲歌，聲振林木，響遏行雲。」", example: "合唱團主唱的音色嘹亮高亢，響遏行雲，令全場觀眾陶醉。" },
+            { idiom: "陽春白雪", zhuyin: "ㄧㄤˊ 㔝ㄨㄣ ㄅㄞˊ ㄒㄩㄝˇ", diff: "hard", meaning: "比喻高深高雅、不夠普及的文學藝術作品。", origin: "戰國·宋玉《對楚王問》：「客有歌於郢中者……其為陽春白雪，國中屬和者不過數人。」", example: "這部先鋒電影風格抽象極致，實屬陽春白雪，受眾較少。" },
+            { idiom: "下里巴人", zhuyin: "ㄒㄧㄚˋ ㄌㄧˇ ㄅㄚ ㄖㄣˊ", diff: "hard", meaning: "比喻通俗普及、平易近人的文學藝術作品。", origin: "戰國·宋玉《對楚王問》：「客有歌於郢中者，其始曰下里巴人，國中屬和者數千人。」", example: "流行音樂雖屬下里巴人，卻能帶來廣泛的共鳴與撫慰。" },
+            { idiom: "金玉其外", zhuyin: "ㄐㄧㄣ ㄩˋ ㄑㄧˊ ㄨㄞˋ", diff: "hard", meaning: "外表像金玉般華美，內裡卻敗壞不堪（常與「敗絮其中」連用）。", origin: "明·劉基《賣柑者言》：「金玉其外，敗絮其中。」", example: "這家公司外表光鮮亮麗，財務卻早已混亂，真是金玉其外。" },
+            { idiom: "敗絮其中", zhuyin: "ㄅㄞˋ ㄒㄩˋ ㄑㄧˊ ㄓㄨㄥ", diff: "hard", meaning: "內在充滿爛棉花，比喻內在破敗糟糕。", origin: "明·劉基《賣柑者言》典故。", example: "商品包裝再華麗，若品質不佳，終究是敗絮其中。" },
+            { idiom: "繁文縟節", zhuyin: "ㄈㄢˊ ㄨㄣ ㄖㄨˋ ㄐㄧㄝˊ", diff: "hard", meaning: "繁瑣過度、拘束不實用的儀式禮節或行政程序。", origin: "宋·蘇軾《上神宗皇帝書》禮儀簡化觀念。", example: "學生會決定簡化行政申請流程，廢除不必要的繁文縟節。" },
+            { idiom: "錙銖必較", zhuyin: "ㄗ ㄓㄨ ㄅㄧˋ ㄐㄧㄠˋ", diff: "hard", meaning: "極微小的數量也要計較，形容過於吝嗇小氣或要求極精細。", origin: "《荀子·富國》：「細微錙銖，必嚴較之。」", example: "做公益事業應當大氣開闊，不必在微小的費用上錙銖必較。" },
+            { idiom: "差之毫厘", zhuyin: "ㄔㄚ ㄓ ㄏㄠˊ ㄌㄧˊ", diff: "hard", meaning: "開始時相差極微小（常與「謬以千里」連用）。", origin: "《禮記·經解》：「《易》曰：差之毫厘，繆以千里。」", example: "精密航太計算絕不能粗心，否則差之毫厘，謬以千里。" },
+            { idiom: "謬以千里", zhuyin: "ㄇㄧㄡˋ ㄧˇ ㄑㄧㄢ ㄌㄧˇ", diff: "hard", meaning: "結果會產生巨大的錯誤與偏差。", origin: "《漢書·司馬遷傳》典故。", example: "邏輯推理前提若錯誤，推導出來的結論便會謬以千里。" },
+            { idiom: "狗尾續貂", zhuyin: "ㄍㄡˇ ㄨㄟˇ ㄒㄩˋ ㄉㄧㄠ", diff: "hard", meaning: "比喻用不好的東西接到好的東西後面，前後極不相稱。", origin: "《晉書·趙王倫傳》：「貂不足，狗尾續。」", example: "原著小說文筆絕佳，這部續集質量粗糙，簡直是狗尾續貂。" },
+            { idiom: "拾人牙慧", zhuyin: "ㄕˊ ㄖㄣˊ ㄧㄚˊ ㄏㄨㄟˋ", diff: "hard", meaning: "抄襲拾取別人說過的話或觀點作為自己的言論。", origin: "南朝宋·劉義慶《世說新語·文學》：「殷中軍云：康伯未得我牙後慧。」", example: "寫論文要有自己的獨到見解，切忌拾人牙慧。" },
+            { idiom: "始作俑者", zhuyin: "ㄕˇ ㄗㄨㄛˋ ㄩㄥˇ ㄓㄜˇ", diff: "hard", meaning: "比喻第一個發明或發起壞事的人。", origin: "《孟子·梁惠王上》：「始作俑者，其無後乎！」", example: "揭發這次集體作弊事件後，警方終於抓到了始作俑者。" },
+            { idiom: "綠林好漢", zhuyin: "ㄌㄩˋ ㄌㄧㄣˊ ㄏㄠˇ ㄏㄢˋ", diff: "hard", meaning: "指聚集山林、反抗官府或行俠仗義的武裝群眾。", origin: "《後漢書·劉玄傳》綠林山起義典故。", example: "這部武俠小說描寫了許多綠林好漢行俠仗義的故事。" },
+            { idiom: "侃侃而談", zhuyin: "ㄎㄢˇ ㄎㄢˇ ㄦˊ ㄊㄢˊ", diff: "hard", meaning: "理直氣壯、從容不迫地談話發言。", origin: "《論語·鄉黨》：「朝，與下大夫言，侃侃如也。」", example: "面對評審的提問，他自信鎮定、侃侃而談，獲得極高評價。" },
+            { idiom: "剛愎自用", zhuyin: "ㄍㄤ ㄅㄧˋ ㄗˋ ㄩㄥˋ", diff: "hard", meaning: "性情固執傲慢，強詞奪理，不肯接受別人的意見。", origin: "《左傳·宣公十二年》：「剛愎不仁，未易犯也。」", example: "身為領導者若剛愎自用，不聽團隊建言，終將面臨失敗。" },
+            { idiom: "醍醐灌頂", zhuyin: "ㄊㄧˊ ㄏㄨˊ ㄍㄨㄢˋ ㄉㄧㄥˇ", diff: "hard", meaning: "比喻聽了智慧精闢的言論，受到很大的啟發，頓時豁然開朗。", origin: "《大般涅槃經》與唐·顧況詩典故。", example: "聽完教授對這道哲學難題的解答，令人有如醍醐灌頂般豁然開朗。" },
+            { idiom: "櫛風沐雨", zhuyin: "ㄐㄧ節 ㄈㄥ ㄇㄨˋ ㄩˇ", diff: "hard", meaning: "以風梳頭，以雨洗髮，形容奔波在外，風吹雨打極其辛勞。", origin: "《莊子·天下》：「沐甚雨，櫛疾風。」", example: "地質探勘團隊櫛風沐雨，長年在野外進行科學記錄。" },
+            { idiom: "炙手可熱", zhuyin: "ㄓˋ ㄕㄡˇ ㄎㄜˇ ㄖㄜˋ", diff: "hard", meaning: "手一靠近就覺得熱，比喻權勢極大，亦指事物極受歡迎熱門。", origin: "唐·杜甫《麗人行》：「炙手可熱勢絕倫，慎莫近前丞相嗔。」", example: "數據科學與AI應用是當前最炙手可熱的熱門選讀領域。" },
+            { idiom: "鶼鰈情深", zhuyin: "ㄐㄧㄢ ㄉㄧㄝˊ ㄑㄧㄥˊ ㄕㄣ", diff: "hard", meaning: "比喻夫妻感情深厚，相親相愛。", origin: "《爾雅·釋地》比翼鳥與比目魚典故。", example: "祖父母結髮六十年依然鶼鰈情深，令人十分羨慕。" },
+            { idiom: "緣木求魚", zhuyin: "ㄩㄢˊ ㄇㄨˋ ㄑㄧㄡˊ ㄩˊ", diff: "hard", meaning: "爬到樹上去找魚，比喻方向或方法錯誤，絕對不可能達到目的。", origin: "《孟子·梁惠王上》：「以若所為，求若所欲，猶緣木而求魚也。」", example: "不讀書只靠拜拜求好成績，無異於緣木求魚。" },
+            { idiom: "腹背受敵", zhuyin: "ㄈㄨˋ ㄅㄟˋ ㄕㄡˋ ㄉㄧˊ", diff: "hard", meaning: "前後兩面都受到敵人的夾擊，比喻處境極其孤立危急。", origin: "《魏書·崔浩傳》：「腹背受敵，形勢危殆。」", example: "辯論台上我方遭到兩造立場包夾，陷入腹背受敵的苦戰。" },
+            { idiom: "罄竹難書", zhuyin: "ㄑㄧㄥˋ ㄓㄨˊ ㄋㄢˊ ㄕㄨ", diff: "hard", meaning: "把竹子用盡也寫不完，形容罪惡極多，寫不勝寫。", origin: "《舊唐書·李密傳》：「罄南山之竹，書罪未窮。」", example: "這名歹徒犯下的罪行滔天，真是罄竹難書。" },
+            { idiom: "倒行逆施", zhuyin: "ㄉㄠˋ ㄒㄧㄥˊ ㄋㄧˋ ㄕ", diff: "hard", meaning: "比喻不按照正道做事，或是行為違背常理違背社會公德。", origin: "《史記·伍子胥列傳》：「吾日暮途遠，吾故倒行而逆施之。」", example: "獨裁者倒行逆施，終將受到歷史與人民的審判。" },
+            { idiom: "舐犢情深", zhuyin: "ㄕˋ ㄉㄨˊ ㄑㄧㄥˊ ㄕㄣ", diff: "hard", meaning: "老牛舔小牛表達愛意，比喻父母對子女極深厚的疼愛之情。", origin: "《後漢書·楊修傳》：「猶懷老牛舐犢之愛。」", example: "父母無微不至地關懷我們的生活，足見舐犢情深。" },
+            { idiom: "越鳥巢南枝", zhuyin: "ㄩㄝˋ ㄋㄧㄠˇ ㄔㄠˊ ㄋㄢˊ ㄓ", diff: "hard", meaning: "南方飛來的鳥棲息在朝南的樹枝上，比喻不忘故土或懷念家鄉。", origin: "《古詩十九首·行行重行行》：「胡馬依北風，越鳥巢南枝。」", example: "海外遊子心繫故鄉，正所謂越鳥巢南枝，情深意長。" }
+        ];
+
+
+        /* ----------------------------------------------------
+           2. GAME AUDIO SYNTHESIZER (Web Audio API)
+           ---------------------------------------------------- */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                try {
+                    if (!this.ctx) {
+                        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                        if (AudioContextClass) {
+                            this.ctx = new AudioContextClass();
+                        }
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume().catch(() => {});
+                    }
+                } catch(e) {
+                    console.warn("AudioContext init warning:", e);
+                }
+            }
+            playClick() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.05);
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.05);
+                } catch(e) {
+                    console.warn("playClick warning:", e);
+                }
+            }
+            playTimerTick() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.03);
+                } catch(e) {
+                    console.warn("playTimerTick warning:", e);
+                }
+            }
+            playFanfare() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                    notes.forEach((freq, idx) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0, now + idx * 0.1);
+                        gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.1 + 0.05);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.4);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now + idx * 0.1);
+                        osc.stop(now + idx * 0.1 + 0.4);
+                    });
+                } catch(e) {
+                    console.warn("playFanfare warning:", e);
+                }
+            }
+            playChimeError() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const notes = [300, 260, 220]; // Descending tones
+                    notes.forEach((freq, idx) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                        gain.gain.setValueAtTime(0.12, now + idx * 0.12);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.25);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now + idx * 0.12);
+                        osc.stop(now + idx * 0.12 + 0.25);
+                    });
+                } catch(e) {
+                    console.warn("playChimeError warning:", e);
+                }
+            }
+        }
+        const sfx = new SoundFX();
+
+
+        /* ----------------------------------------------------
+           3. GAME STATE & VARIABLES
+           ---------------------------------------------------- */
+        let players = ["小明", "小華", "小美", "小強"];
+        let scores = {};
+        let config = {
+            totalRounds: 5,
+            speakingTime: 20,
+            difficulty: "medium"
+        };
+        let currentRound = 1;
+        let usedIdiomIndexes = new Set();
+
+        // Round Runtime State
+        let roundData = {
+            idiomObj: null,
+            thinker: "",
+            honest: "",
+            bluffers: [],
+            roleRevealQueue: [],
+            currentRolePlayerIndex: 0,
+            roleRevealTimer: 10,
+            roleTimerInterval: null,
+            speakers: [],
+            currentSpeakerIdx: 0,
+            speakerTimer: 20,
+            speakerTimerInterval: null,
+            isSpeakerPaused: false,
+            roundChoices: []
+        };
+
+
+        /* ----------------------------------------------------
+           4. INITIAL SETUP & SETUP SCREEN LOGIC
+           ---------------------------------------------------- */
+        window.onload = function() {
+            renderPlayerInputs();
+        };
+
+        function renderPlayerInputs() {
+            try {
+                const container = document.getElementById("playerInputs");
+                if (!container) return;
+                container.innerHTML = "";
+                players.forEach((p, idx) => {
+                    const div = document.createElement("div");
+                    div.className = "flex items-center space-x-2";
+                    div.innerHTML = `
+                        <span class="text-xs font-bold text-slate-400 w-5">${idx + 1}.</span>
+                        <input type="text" value="${p}" onchange="updatePlayerName(${idx}, this.value)"
+                            class="flex-grow bg-white border border-slate-300 text-slate-800 text-sm font-bold rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none" placeholder="玩家暱稱">
+                        ${players.length > 3 ? `<button type="button" onclick="removePlayerField(${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 text-sm">✕</button>` : ''}
+                    `;
+                    container.appendChild(div);
+                });
+                const countEl = document.getElementById("playerCount");
+                if (countEl) countEl.innerText = players.length;
+            } catch (e) {
+                console.error("renderPlayerInputs error:", e);
+            }
+        }
+
+        function updatePlayerName(idx, val) {
+            sfx.playClick();
+            if (players[idx] !== undefined) {
+                players[idx] = val.trim();
+            }
+        }
+
+        function addPlayerField() {
+            sfx.playClick();
+            if (players.length < 10) {
+                players.push(`玩家${players.length + 1}`);
+                renderPlayerInputs();
+            }
+        }
+
+        function removePlayerField(idx) {
+            sfx.playClick();
+            if (players.length > 3) {
+                players.splice(idx, 1);
+                renderPlayerInputs();
+            }
+        }
+
+        function validateSetup() {
+            try {
+                const inputs = document.querySelectorAll("#playerInputs input");
+                if (inputs && inputs.length > 0) {
+                    const readNames = Array.from(inputs).map(inp => inp.value.trim());
+                    if (readNames.length >= 3) {
+                        players = readNames;
+                    }
+                }
+                const errorEl = document.getElementById("playerError");
+                const clean = players.map(p => (p || "").trim());
+                const hasEmpty = clean.some(p => p === "");
+                const hasDuplicates = new Set(clean).size !== clean.length;
+
+                if (clean.length < 3 || clean.length > 10 || hasEmpty || hasDuplicates) {
+                    if (errorEl) errorEl.classList.remove("hidden");
+                    return false;
+                }
+                if (errorEl) errorEl.classList.add("hidden");
+                return true;
+            } catch (e) {
+                console.error("validateSetup error:", e);
+                return true;
+            }
+        }
+
+        function startGame() {
+            try {
+                sfx.playClick();
+                if (!validateSetup()) return;
+
+                // Read settings safely
+                const roundsEl = document.getElementById("settingRounds");
+                const timerEl = document.getElementById("settingTimer");
+                const diffEl = document.getElementById("settingDifficulty");
+
+                config.totalRounds = roundsEl ? (parseInt(roundsEl.value) || 5) : 5;
+                config.speakingTime = timerEl ? (parseInt(timerEl.value) || 20) : 20;
+                config.difficulty = diffEl ? diffEl.value : "medium";
+
+                // Initialize Scores
+                scores = {};
+                players.forEach(p => scores[p] = 0);
+                currentRound = 1;
+                usedIdiomIndexes.clear();
+
+                const badge = document.getElementById("gameBadge");
+                if (badge) badge.classList.remove("hidden");
+                const totalRoundsEl = document.getElementById("totalRoundsText");
+                if (totalRoundsEl) totalRoundsEl.innerText = config.totalRounds;
+
+                startRound();
+            } catch (err) {
+                console.error("startGame error:", err);
+                switchStage("stage-role-pass");
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           5. ROUND ENGINE & ROLE ASSIGNMENT (STAGE 1 & 2)
+           ---------------------------------------------------- */
+        function startRound() {
+            try {
+                const roundTextEl = document.getElementById("currentRoundText");
+                if (roundTextEl) roundTextEl.innerText = currentRound;
+
+                // Pick an unused idiom based on difficulty
+                let availableIdxs = [];
+                if (Array.isArray(IDIOM_DATABASE) && IDIOM_DATABASE.length > 0) {
+                    IDIOM_DATABASE.forEach((item, idx) => {
+                        if (!usedIdiomIndexes.has(idx)) {
+                            if (config.difficulty === "chaos" || config.difficulty === "mixed" || item.diff === config.difficulty) {
+                                availableIdxs.push(idx);
+                            }
+                        }
+                    });
+
+                    // Fallback 1: Any unused idiom if chosen difficulty is exhausted
+                    if (availableIdxs.length === 0) {
+                        IDIOM_DATABASE.forEach((_, idx) => {
+                            if (!usedIdiomIndexes.has(idx)) availableIdxs.push(idx);
+                        });
+                    }
+
+                    // Fallback 2: Reset used set if ALL 180 idioms have been played
+                    if (availableIdxs.length === 0) {
+                        usedIdiomIndexes.clear();
+                        IDIOM_DATABASE.forEach((_, idx) => availableIdxs.push(idx));
+                    }
+                }
+
+                let chosenIdx = availableIdxs.length > 0 
+                    ? availableIdxs[Math.floor(Math.random() * availableIdxs.length)]
+                    : 0;
+
+                usedIdiomIndexes.add(chosenIdx);
+
+                // Ultimate fallback guarantee so roundData.idiomObj is NEVER undefined
+                roundData.idiomObj = (IDIOM_DATABASE && IDIOM_DATABASE[chosenIdx]) || {
+                    idiom: "一箭雙雕",
+                    zhuyin: "ㄧ ㄐㄧㄢˋ ㄕㄨㄤ ㄉㄧㄠ",
+                    diff: "easy",
+                    meaning: "比喻做一件事同時達到兩種目的或效果。",
+                    origin: "《北史·長孫晟傳》",
+                    example: "他參加語文競賽獲得獎狀與學習歷程，真是一箭雙雕。"
+                };
+
+                // Assign Roles randomly
+                const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+                roundData.thinker = shuffledPlayers[0] || "玩家1";
+                roundData.honest = shuffledPlayers[1] || "玩家2";
+                roundData.bluffers = shuffledPlayers.slice(2);
+                if (roundData.bluffers.length === 0) {
+                    roundData.bluffers = ["玩家3"];
+                }
+
+                // Set role reveal queue (everyone inspects identity)
+                roundData.roleRevealQueue = [...players];
+                roundData.currentRolePlayerIndex = 0;
+
+                // Prepare Speakers Queue for Stage 3 (Honest + Bluffers)
+                roundData.speakers = [roundData.honest, ...roundData.bluffers].sort(() => Math.random() - 0.5);
+
+                showPassDeviceScreen();
+            } catch (err) {
+                console.error("startRound error:", err);
+                showPassDeviceScreen();
+            }
+        }
+
+        function removePlayerField(idx) {
+            sfx.playClick();
+            if (players.length > 3) {
+                players.splice(idx, 1);
+                renderPlayerInputs();
+            }
+        }
+
+        function validateSetup() {
+            const errorEl = document.getElementById("playerError");
+            // Check for empty names or duplicates
+            const clean = players.map(p => p.trim());
+            const hasEmpty = clean.some(p => p === "");
+            const hasDuplicates = new Set(clean).size !== clean.length;
+
+            if (clean.length < 3 || clean.length > 10 || hasEmpty || hasDuplicates) {
+                errorEl.classList.remove("hidden");
+                return false;
+            }
+            errorEl.classList.add("hidden");
+            return true;
+        }
+
+        function startGame() {
+            sfx.playClick();
+            if (!validateSetup()) return;
+
+            // Read settings
+            config.totalRounds = parseInt(document.getElementById("settingRounds").value);
+            config.speakingTime = parseInt(document.getElementById("settingTimer").value);
+            config.difficulty = document.getElementById("settingDifficulty").value;
+
+            // Initialize Scores
+            scores = {};
+            players.forEach(p => scores[p] = 0);
+            currentRound = 1;
+            usedIdiomIndexes.clear();
+
+            document.getElementById("gameBadge").classList.remove("hidden");
+            document.getElementById("totalRoundsText").innerText = config.totalRounds;
+
+            startRound();
+        }
+
+
+        /* ----------------------------------------------------
+           5. ROUND ENGINE & ROLE ASSIGNMENT (STAGE 1 & 2)
+           ---------------------------------------------------- */
+        function startRound() {
+            document.getElementById("currentRoundText").innerText = currentRound;
+
+            // Pick an unused idiom based on difficulty
+            let availableIdxs = [];
+            IDIOM_DATABASE.forEach((item, idx) => {
+                if (!usedIdiomIndexes.has(idx)) {
+                    if (config.difficulty === "mixed" || item.diff === config.difficulty) {
+                        availableIdxs.push(idx);
+                    }
+                }
+            });
+
+            // Fallback if all idioms of chosen difficulty used
+            if (availableIdxs.length === 0) {
+                IDIOM_DATABASE.forEach((_, idx) => {
+                    if (!usedIdiomIndexes.has(idx)) availableIdxs.push(idx);
+                });
+            }
+
+            const chosenIdx = availableIdxs[Math.floor(Math.random() * availableIdxs.length)];
+            usedIdiomIndexes.add(chosenIdx);
+            roundData.idiomObj = IDIOM_DATABASE[chosenIdx];
+
+            // Assign Roles randomly
+            const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+            roundData.thinker = shuffledPlayers[0];
+            roundData.honest = shuffledPlayers[1];
+            roundData.bluffers = shuffledPlayers.slice(2);
+
+            // Set role reveal queue (everyone inspects identity)
+            roundData.roleRevealQueue = [...players];
+            roundData.currentRolePlayerIndex = 0;
+
+            // Prepare Speakers Queue for Stage 3 (Honest + Bluffers)
+            roundData.speakers = [roundData.honest, ...roundData.bluffers].sort(() => Math.random() - 0.5);
+
+            showPassDeviceScreen();
+        }
+
+        function showPassDeviceScreen() {
+            switchStage("stage-role-pass");
+            const targetP = roundData.roleRevealQueue[roundData.currentRolePlayerIndex];
+            document.getElementById("targetPlayerName").innerText = targetP;
+        }
+
+        function revealRoleCard() {
+            sfx.playClick();
+            switchStage("stage-role-reveal");
+
+            const player = roundData.roleRevealQueue[roundData.currentRolePlayerIndex];
+            const detailBox = document.getElementById("roleDetailBox");
+            const roleBadge = document.getElementById("roleBadge");
+            const roleTitle = document.getElementById("roleTitle");
+            const roleContent = document.getElementById("roleContent");
+            const roleMission = document.getElementById("roleMission");
+
+            if (player === roundData.thinker) {
+                // THINKER ROLE
+                detailBox.className = "p-6 rounded-2xl border-2 transition-all space-y-4 border-purple-300 bg-purple-50/90";
+                roleBadge.className = "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-200 text-purple-800";
+                roleBadge.innerText = "🎭 你的身份：想想";
+                roleTitle.innerText = "身分：想想 (推理者)";
+                roleContent.innerHTML = `
+                    <p class="text-sm font-bold text-purple-900">你完全不知道這次成語的標準釋義。</p>
+                    <p class="text-xs text-slate-600">請仔細聆聽全場發言，觀察大家的眼神與表達，找出誰才是說真話的老實人！</p>
+                `;
+                roleMission.innerText = "🎯 任務提示：專注聽大家發言，指認出說真話的「老實人」！";
+            } else if (player === roundData.honest) {
+                // HONEST PERSON ROLE
+                detailBox.className = "p-6 rounded-2xl border-2 transition-all space-y-4 border-emerald-300 bg-emerald-50/90";
+                roleBadge.className = "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-200 text-emerald-800";
+                roleBadge.innerText = "😇 你的身份：老實人";
+                roleTitle.innerText = `成語：【${roundData.idiomObj.idiom}】`;
+                roleContent.innerHTML = `
+                    <div class="text-xs font-bold text-emerald-700">注音：${roundData.idiomObj.zhuyin}</div>
+                    <div class="text-sm font-bold text-slate-800 mt-1">【真實釋義】</div>
+                    <div class="text-sm text-slate-800 font-semibold leading-relaxed">${roundData.idiomObj.meaning}</div>
+                `;
+                roleMission.innerText = "🎯 任務提示：依據正確釋義發言，讓想想找到正確答案！";
+            } else {
+                // BLUFFER ROLE
+                detailBox.className = "p-6 rounded-2xl border-2 transition-all space-y-4 border-rose-300 bg-rose-50/90";
+                roleBadge.className = "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-200 text-rose-800";
+                roleBadge.innerText = "😈 你的身份：瞎掰人";
+                roleTitle.innerText = `成語：【${roundData.idiomObj.idiom}】`;
+                roleContent.innerHTML = `
+                    <div class="text-xs font-bold text-rose-700">注音：${roundData.idiomObj.zhuyin}</div>
+                    <p class="text-sm font-bold text-rose-900 mt-1">⚠️ 你不知道正確釋義！</p>
+                    <p class="text-xs text-slate-600">發揮你的創意與演技，一本正經地瞎掰這個成語的意思！</p>
+                `;
+                roleMission.innerText = "🎯 任務提示：即興編造合理解釋，吸引想想選擇你的答案！";
+            }
+
+            // Start 10-second automatic countdown timer
+            startRoleRevealTimer();
+        }
+
+        function startRoleRevealTimer() {
+            clearInterval(roundData.roleTimerInterval);
+            roundData.roleRevealTimer = 10;
+
+            const timerText = document.getElementById("roleRevealCountdownText");
+            const timerBar = document.getElementById("roleTimerBar");
+
+            timerText.innerText = `10 秒後自動切換`;
+            timerBar.style.width = "100%";
+
+            roundData.roleTimerInterval = setInterval(() => {
+                roundData.roleRevealTimer--;
+                timerText.innerText = `${roundData.roleRevealTimer} 秒後自動切換`;
+                timerBar.style.width = `${(roundData.roleRevealTimer / 10) * 100}%`;
+
+                if (roundData.roleRevealTimer <= 0) {
+                    clearInterval(roundData.roleTimerInterval);
+                    finishRoleReveal();
+                }
+            }, 1000);
+        }
+
+        function finishRoleReveal() {
+            sfx.playClick();
+            clearInterval(roundData.roleTimerInterval);
+
+            roundData.currentRolePlayerIndex++;
+            if (roundData.currentRolePlayerIndex < roundData.roleRevealQueue.length) {
+                showPassDeviceScreen();
+            } else {
+                // All players checked roles -> Start Speaking Phase
+                startSpeakingPhase();
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           6. SPEAKING PHASE (STAGE 3) - NO HINTS ON SHARED TIMER
+           ---------------------------------------------------- */
+        function startSpeakingPhase() {
+            switchStage("stage-speaking");
+
+            // Display Idiom Title ONLY (NO LITERAL HINT BOX AT ALL!)
+            document.getElementById("speakingIdiomTitle").innerText = roundData.idiomObj.idiom;
+
+            roundData.currentSpeakerIdx = 0;
+            renderSpeakerQueue();
+            loadCurrentSpeaker();
+        }
+
+        function renderSpeakerQueue() {
+            const queueList = document.getElementById("speakerQueueList");
+            queueList.innerHTML = "";
+            roundData.speakers.forEach((spk, idx) => {
+                const isCurrent = idx === roundData.currentSpeakerIdx;
+                const isDone = idx < roundData.currentSpeakerIdx;
+
+                let cls = "bg-slate-200 text-slate-600";
+                if (isCurrent) cls = "bg-sky-500 text-white font-extrabold ring-2 ring-sky-300";
+                else if (isDone) cls = "bg-slate-300 text-slate-500 line-through";
+
+                const badge = document.createElement("span");
+                badge.className = `px-3 py-1 rounded-full text-xs ${cls}`;
+                badge.innerText = `${idx + 1}. ${spk}`;
+                queueList.appendChild(badge);
+            });
+
+            document.getElementById("speakerIndexText").innerText = roundData.currentSpeakerIdx + 1;
+            document.getElementById("speakerTotalText").innerText = roundData.speakers.length;
+        }
+
+        function loadCurrentSpeaker() {
+            clearInterval(roundData.speakerTimerInterval);
+            roundData.isSpeakerPaused = false;
+            document.getElementById("pauseSpeakerBtn").innerText = "⏸️ 暫停";
+
+            const speakerName = roundData.speakers[roundData.currentSpeakerIdx];
+            document.getElementById("currentSpeakerName").innerText = speakerName;
+
+            roundData.speakerTimer = config.speakingTime;
+            updateSpeakerTimerUI();
+
+            roundData.speakerTimerInterval = setInterval(() => {
+                if (!roundData.isSpeakerPaused) {
+                    roundData.speakerTimer--;
+                    sfx.playTimerTick();
+                    updateSpeakerTimerUI();
+
+                    if (roundData.speakerTimer <= 0) {
+                        clearInterval(roundData.speakerTimerInterval);
+                        nextSpeaker();
+                    }
+                }
+            }, 1000);
+        }
+
+        function updateSpeakerTimerUI() {
+            document.getElementById("speakerTimerText").innerText = roundData.speakerTimer;
+            const pct = (roundData.speakerTimer / config.speakingTime) * 100;
+            const ring = document.getElementById("speakerTimerRing");
+            ring.setAttribute("stroke-dasharray", `${pct}, 100`);
+
+            if (roundData.speakerTimer <= 5) {
+                ring.classList.remove("text-sky-500");
+                ring.classList.add("text-rose-500");
+            } else {
+                ring.classList.remove("text-rose-500");
+                ring.classList.add("text-sky-500");
+            }
+        }
+
+        function toggleSpeakerPause() {
+            sfx.playClick();
+            roundData.isSpeakerPaused = !roundData.isSpeakerPaused;
+            const btn = document.getElementById("pauseSpeakerBtn");
+            btn.innerText = roundData.isSpeakerPaused ? "▶️ 繼續" : "⏸️ 暫停";
+        }
+
+        function nextSpeaker() {
+            sfx.playClick();
+            clearInterval(roundData.speakerTimerInterval);
+
+            roundData.currentSpeakerIdx++;
+            if (roundData.currentSpeakerIdx < roundData.speakers.length) {
+                renderSpeakerQueue();
+                loadCurrentSpeaker();
+            } else {
+                // Everyone finished speaking -> Go to Reasoning Phase
+                startReasoningPhase();
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           7. REASONING PHASE (STAGE 4)
+           ---------------------------------------------------- */
+        function startReasoningPhase() {
+            switchStage("stage-reasoning");
+
+            document.getElementById("thinkerPlayerName").innerText = roundData.thinker;
+
+            // Build Honest Person choices (all players except Thinker)
+            const honestContainer = document.getElementById("honestOptions");
+            honestContainer.innerHTML = "";
+            const candidateList = players.filter(p => p !== roundData.thinker);
+
+            candidateList.forEach((name, idx) => {
+                const label = document.createElement("label");
+                label.className = "flex items-center p-3 rounded-xl border border-slate-200 bg-white hover:bg-purple-50 cursor-pointer transition font-bold text-sm text-slate-800";
+                label.innerHTML = `
+                    <input type="radio" name="honestChoice" value="${name}" class="w-4 h-4 text-purple-600 focus:ring-purple-500 mr-2" ${idx === 0 ? 'checked' : ''}>
+                    <span>${name}</span>
+                `;
+                honestContainer.appendChild(label);
+            });
+        }
+
+        function submitReasoning(event) {
+            event.preventDefault();
+            sfx.playClick();
+
+            const honestVal = document.querySelector('input[name="honestChoice"]:checked').value;
+            const guessedHonestCorrect = (honestVal === roundData.honest);
+
+            let scoreLogs = [];
+
+            if (guessedHonestCorrect) {
+                // Thinker +2, Honest Person +2
+                scores[roundData.thinker] += 2;
+                scores[roundData.honest] += 2;
+                scoreLogs.push(`🎯 🎭【${roundData.thinker}】成功指認出真正的老實人【${roundData.honest}】！`);
+                scoreLogs.push(`🤝 老實人是想想的朋友！【${roundData.thinker}】與【${roundData.honest}】雙方各獲 +2 分！`);
+            } else {
+                // Chosen Bluffer +3, Thinker & Honest Person +0
+                scores[honestVal] += 3;
+                scoreLogs.push(`❌ 🎭【${roundData.thinker}】指認失敗，誤將瞎掰王【${honestVal}】當成老實人！`);
+                scoreLogs.push(`👑 😈 瞎掰王【${honestVal}】成功製造混亂，個人獨得 +3 分！`);
+            }
+
+            showScoreRevealPhase(guessedHonestCorrect, scoreLogs);
+        }
+
+
+        /* ----------------------------------------------------
+           8. ANSWER REVEAL & LEARNING PHASE (STAGE 5A & 5B)
+           PURELY MANUAL ADVANCEMENT - NO AUTOMATIC TIMERS
+           ---------------------------------------------------- */
+        function showScoreRevealPhase(isSuccess, scoreLogs) {
+            switchStage("stage-score-reveal");
+
+            const badge = document.getElementById("revealResultBadge");
+            if (isSuccess) {
+                badge.className = "inline-block px-4 py-1.5 rounded-full text-sm font-extrabold shadow-sm bg-emerald-100 text-emerald-800 border border-emerald-300";
+                badge.innerText = "🎉 推理成功！找到了老實人朋友！";
+                sfx.playFanfare();
+                triggerConfetti();
+            } else {
+                badge.className = "inline-block px-4 py-1.5 rounded-full text-sm font-extrabold shadow-sm bg-rose-100 text-rose-800 border border-rose-300";
+                badge.innerText = "嘎～ 慘遭瞎掰王成功混淆！";
+                sfx.playChimeError();
+                triggerCrowAnimation();
+            }
+
+            // Render Role Identities
+            document.getElementById("revealThinkerName").innerText = roundData.thinker;
+            document.getElementById("revealHonestName").innerText = roundData.honest;
+            document.getElementById("revealBlufferNames").innerText = roundData.bluffers.join("、");
+
+            // Render Score Logs
+            const scoreSummaryContainer = document.getElementById("scoreChangeSummary");
+            scoreSummaryContainer.innerHTML = scoreLogs.map(log => `<p class="font-bold">${log}</p>`).join("");
+        }
+
+        function goToStageLearn() {
+            sfx.playClick();
+            switchStage("stage-learn-reveal");
+
+            // Render Idiom Details
+            const item = roundData.idiomObj;
+            document.getElementById("learnIdiom").innerText = item.idiom;
+            document.getElementById("learnZhuyin").innerText = item.zhuyin;
+
+            const diffMap = { easy: "簡單 (日常生活)", medium: "中等 (考試常見)", hard: "困難 (自我挑戰)" };
+            document.getElementById("learnDifficulty").innerText = diffMap[item.diff] || "中等";
+
+            document.getElementById("learnMeaning").innerText = item.meaning;
+            document.getElementById("learnOrigin").innerText = item.origin;
+            document.getElementById("learnExample").innerText = item.example;
+
+            // Configure Button for Next Round or Leaderboard
+            const nextBtn = document.getElementById("nextRoundBtn");
+            if (currentRound >= config.totalRounds) {
+                nextBtn.innerText = "查看最終排行榜 🏆";
+            } else {
+                nextBtn.innerText = `前往第 ${currentRound + 1} 回合 ➡️`;
+            }
+        }
+
+        function advanceToNextRound() {
+            sfx.playClick();
+            if (currentRound >= config.totalRounds) {
+                showFinalLeaderboard();
+            } else {
+                currentRound++;
+                startRound();
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           9. FINAL LEADERBOARD (STAGE 6)
+           ---------------------------------------------------- */
+        function showFinalLeaderboard() {
+            switchStage("stage-leaderboard");
+
+            const rankList = document.getElementById("finalRankList");
+            rankList.innerHTML = "";
+
+            // Sort players by scores descending
+            const sorted = [...players].sort((a, b) => scores[b] - scores[a]);
+
+            sorted.forEach((player, idx) => {
+                let badge = `<span class="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">${idx + 1}</span>`;
+                let borderCls = "border-slate-200 bg-white";
+
+                if (idx === 0) {
+                    badge = `<span class="w-8 h-8 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center font-black text-sm shadow">🥇</span>`;
+                    borderCls = "border-amber-300 bg-amber-50/80 shadow-md";
+                } else if (idx === 1) {
+                    badge = `<span class="w-8 h-8 rounded-full bg-slate-300 text-slate-900 flex items-center justify-center font-black text-sm shadow">🥈</span>`;
+                    borderCls = "border-slate-300 bg-slate-50";
+                } else if (idx === 2) {
+                    badge = `<span class="w-8 h-8 rounded-full bg-amber-700 text-white flex items-center justify-center font-black text-sm shadow">🥉</span>`;
+                    borderCls = "border-amber-200 bg-amber-50/30";
+                }
+
+                const div = document.createElement("div");
+                div.className = `flex items-center justify-between p-4 rounded-xl border ${borderCls}`;
+                div.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        ${badge}
+                        <span class="font-extrabold text-slate-800 text-base md:text-lg">${player}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-2xl font-black text-sky-600">${scores[player]}</span>
+                        <span class="text-xs text-slate-400 font-bold ml-1">分</span>
+                    </div>
+                `;
+                rankList.appendChild(div);
+            });
+
+            sfx.playFanfare();
+            triggerConfetti();
+        }
+
+        function resetGameToSetup() {
+            sfx.playClick();
+            document.getElementById("gameBadge").classList.add("hidden");
+            switchStage("stage-setup");
+        }
+
+
+        /* ----------------------------------------------------
+           10. ANIMATION & STAGE HELPER UTILITIES
+           ---------------------------------------------------- */
+        function switchStage(stageId) {
+            try {
+                const stages = [
+                    "stage-setup", "stage-role-pass", "stage-role-reveal",
+                    "stage-speaking", "stage-reasoning", "stage-score-reveal",
+                    "stage-learn-reveal", "stage-leaderboard"
+                ];
+
+                let targetFound = false;
+                stages.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        if (id === stageId) {
+                            el.classList.remove("hidden");
+                            targetFound = true;
+                        } else {
+                            el.classList.add("hidden");
+                        }
+                    }
+                });
+
+                // Safety fallback to prevent black screen if element id missing
+                if (!targetFound) {
+                    const setupEl = document.getElementById("stage-setup");
+                    if (setupEl) setupEl.classList.remove("hidden");
+                }
+
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (err) {
+                console.error("switchStage error:", err);
+                const setupEl = document.getElementById("stage-setup");
+                if (setupEl) setupEl.classList.remove("hidden");
+            }
+        }
+
+        // Flying Crow Animation (for incorrect guesses)
+        function triggerCrowAnimation() {
+            try {
+                const container = document.getElementById("crowContainer");
+                const element = document.getElementById("crowElement");
+                if (!container || !element) return;
+                container.classList.remove("hidden");
+                element.classList.remove("animate-crow");
+
+                void element.offsetWidth; // Force reflow
+                element.classList.add("animate-crow");
+
+                setTimeout(() => {
+                    container.classList.add("hidden");
+                }, 3600);
+            } catch (e) {
+                console.warn("triggerCrowAnimation warning:", e);
+            }
+        }
+
+        // HTML5 Canvas Confetti Animation (for correct guesses & final win)
+        function triggerConfetti() {
+            try {
+                const canvas = document.getElementById("confettiCanvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                canvas.classList.remove("hidden");
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+
+                const particles = [];
+                const colors = ["#0284c7", "#38bdf8", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899"];
+
+                for (let i = 0; i < 90; i++) {
+                    particles.push({
+                        x: Math.random() * canvas.width,
+                        y: -10,
+                        size: Math.random() * 8 + 4,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        vx: (Math.random() - 0.5) * 4,
+                        vy: Math.random() * 4 + 3,
+                        rotation: Math.random() * 360,
+                        vRot: (Math.random() - 0.5) * 10
+                    });
+                }
+
+                let start = null;
+                function render(timestamp) {
+                    if (!start) start = timestamp;
+                    const progress = timestamp - start;
+
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    particles.forEach(p => {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.rotation += p.vRot;
+
+                        ctx.save();
+                        ctx.translate(p.x, p.y);
+                        ctx.rotate((p.rotation * Math.PI) / 180);
+                        ctx.fillStyle = p.color;
+                        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                        ctx.restore();
+                    });
+
+                    if (progress < 2500) {
+                        requestAnimationFrame(render);
+                    } else {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        canvas.classList.add("hidden");
+                    }
+                }
+                requestAnimationFrame(render);
+            } catch (e) {
+                console.warn("triggerConfetti warning:", e);
+            }
+        }
+    </script>
+</body>
+</html>
